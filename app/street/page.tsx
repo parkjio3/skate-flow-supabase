@@ -130,18 +130,21 @@ const streetCategories = [
   { name: "그라인드", tricks: streetTricks.filter((t) => t.category === "그라인드") },
 ]
 
-export default function StreetPage() {
-  const [selectedTrick, setSelectedTrick] = useState<Trick | null>(null)
+export default function RampPage() {
+  const [selectedTrick, setSelectedTrick] = useState<{ name: string } | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [currentDescription, setCurrentDescription] = useState("")
   const [isEditingDescription, setIsEditingDescription] = useState(false)
   const [newVideoUrl, setNewVideoUrl] = useState("")
   const [isAddingVideo, setIsAddingVideo] = useState(false)
 
+  // 기본 영상 URL
+  const DEFAULT_VIDEO = "https://www.youtube.com/embed/dQw4w9WgXcQ"
+
   // 커스텀 훅 사용
   const { descriptions, saveDescription, addVideo, deleteVideo, getTrickVideos } = useSkateData()
 
-  // 모달 열릴 때 상태 초기화
+  // 모달이 열릴 때 선택된 기술의 데이터 로드
   useEffect(() => {
     if (selectedTrick) {
       setCurrentDescription(descriptions[selectedTrick.name] || "")
@@ -160,7 +163,12 @@ export default function StreetPage() {
 
   const handleAddVideo = () => {
     if (selectedTrick && newVideoUrl.trim()) {
-      addVideo(selectedTrick.name, newVideoUrl, selectedTrick.videoUrl)
+      // URL 변환 로직은 훅 내부에 넣거나 여기서 처리
+      let embedUrl = newVideoUrl.trim()
+      if (embedUrl.includes("watch?v=")) embedUrl = embedUrl.replace("watch?v=", "embed/")
+      else if (embedUrl.includes("youtu.be/")) embedUrl = embedUrl.replace("youtu.be/", "youtube.com/embed/")
+
+      addVideo(selectedTrick.name, embedUrl, DEFAULT_VIDEO)
       setNewVideoUrl("")
       setIsAddingVideo(false)
     }
@@ -168,49 +176,68 @@ export default function StreetPage() {
 
   const handleDeleteVideo = (index: number) => {
     if (selectedTrick) {
-      deleteVideo(selectedTrick.name, index, selectedTrick.videoUrl)
+      deleteVideo(selectedTrick.name, index, DEFAULT_VIDEO)
     }
   }
 
-  const filteredCategories = streetCategories.map(cat => ({
-    ...cat,
-    tricks: cat.tricks.filter(t => t.name.toLowerCase().includes(searchQuery.toLowerCase()))
-  })).filter(cat => cat.tricks.length > 0)
-
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header 영역 (기존과 동일) */}
+    <div className="min-h-screen bg-background text-foreground">
       <header className="border-b border-border bg-card">
-        <div className="container mx-auto px-4 py-4 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/"><Button variant="ghost" size="icon"><ArrowLeft className="size-5" /></Button></Link>
-            <h1 className="font-mono text-2xl font-bold text-primary">SkateFlow</h1>
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-4">
+              <Link href="/"><Button variant="ghost" size="icon"><ArrowLeft className="size-5" /></Button></Link>
+              <h1 className="font-mono text-2xl font-bold text-primary">SkateFlow</h1>
+            </div>
+            <div className="flex flex-1 items-center gap-4 md:max-w-md">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input 
+                  placeholder="검색어 입력..." 
+                  className="pl-9" 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+            </div>
+            <Button variant="ghost" size="icon"><User className="size-5" /></Button>
           </div>
-          <div className="flex gap-2">
-            <Link href="/ramp"><Button variant="outline" size="sm">램프</Button></Link>
-            <Link href="/street"><Button variant="default" size="sm">스트릿</Button></Link>
-            <Link href="/transition"><Button variant="outline" size="sm">트랜지션</Button></Link>
-          </div>
-          <div className="flex flex-1 items-center gap-4 md:max-w-md relative">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="기술 검색..." className="pl-9" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-          </div>
-          <Button variant="ghost" size="icon"><User className="size-5" /></Button>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="container mx-auto space-y-8 px-4 py-8">
-        <h2 className="font-mono text-3xl font-bold">스트릿 기술</h2>
-        <div className="space-y-8">
-          {filteredCategories.map((category) => (
-            <div key={category.name} className="rounded-lg border border-border bg-card p-6 shadow-sm">
-              <h3 className="mb-4 text-xl font-bold text-primary">{category.name}</h3>
-              <div className="grid grid-cols-1 gap-2 md:grid-cols-3 lg:grid-cols-4">
-                {category.tricks.map((trick) => (
-                  <Button key={trick.id} variant="outline" className="h-auto justify-start py-3 text-left hover:border-primary/50" onClick={() => setSelectedTrick(trick)}>
-                    <span className="truncate text-sm">{trick.name}</span>
-                  </Button>
+      <main className="container mx-auto px-4 py-8">
+        <div className="mb-8 text-center">
+          <h2 className="mb-2 text-4xl font-bold">KBRT</h2>
+          <p className="text-xl text-muted-foreground">K&B MINIRAMP RANK TEST</p>
+        </div>
+
+        <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+          {rampRanks.map((rank) => (
+            <div key={rank.name} className="rounded-xl border border-border bg-card p-6 shadow-sm">
+              <div className="mb-6 flex items-center gap-4">
+                <div className={`size-12 rounded-lg bg-gradient-to-br ${rank.color} shadow-md`} />
+                <h3 className="text-xl font-bold">{rank.name}</h3>
+              </div>
+              <div className="space-y-6">
+                {rank.levels.map((level) => (
+                  <div key={level.level} className="space-y-2">
+                    <div className="flex items-baseline gap-2">
+                      <span className="font-bold text-primary">{rank.name} {level.level}</span>
+                      <span className="text-xs text-muted-foreground">{level.description}</span>
+                    </div>
+                    <ul className="flex flex-wrap gap-2">
+                      {level.tricks.map((trick, idx) => (
+                        <li key={idx}>
+                          <button
+                            onClick={() => setSelectedTrick({ name: trick })}
+                            className="text-sm hover:text-primary underline decoration-primary/20 hover:decoration-primary transition-all"
+                          >
+                            {trick}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 ))}
               </div>
             </div>
@@ -218,44 +245,70 @@ export default function StreetPage() {
         </div>
       </main>
 
-      {/* Modal 영역 */}
       <Dialog open={!!selectedTrick} onOpenChange={() => setSelectedTrick(null)}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle className="text-xl font-bold">{selectedTrick?.name}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle className="text-2xl">{selectedTrick?.name}</DialogTitle>
+          </DialogHeader>
+          
           <div className="space-y-6">
             <div className="space-y-4">
-              {selectedTrick && getTrickVideos(selectedTrick.name, selectedTrick.videoUrl).map((videoUrl, index) => (
-                <div key={index} className="space-y-2 border-b pb-4 last:border-0">
+              {selectedTrick && getTrickVideos(selectedTrick.name, DEFAULT_VIDEO).map((videoUrl, index) => (
+                <div key={index} className="group relative space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold">영상 {index + 1}</span>
-                    <Button size="sm" variant="ghost" className="text-destructive hover:bg-destructive/10" onClick={() => handleDeleteVideo(index)}>
-                      <Trash2 className="mr-1 size-4" /> 삭제
+                    <span className="text-sm font-medium text-muted-foreground">영상 #{index + 1}</span>
+                    <Button 
+                      size="sm" 
+                      variant="destructive" 
+                      className="h-8 gap-1"
+                      onClick={() => handleDeleteVideo(index)}
+                    >
+                      <Trash2 className="size-3" /> 삭제
                     </Button>
                   </div>
-                  <div className="aspect-video w-full overflow-hidden rounded-lg bg-black">
-                    <iframe src={videoUrl} title="video" className="size-full" allowFullScreen />
+                  <div className="aspect-video w-full overflow-hidden rounded-xl bg-black shadow-inner">
+                    <iframe src={videoUrl} className="size-full" allowFullScreen />
                   </div>
                 </div>
               ))}
             </div>
 
             {isAddingVideo ? (
-              <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
-                <Input placeholder="YouTube Embed URL..." value={newVideoUrl} onChange={(e) => setNewVideoUrl(e.target.value)} />
-                <div className="flex gap-2"><Button size="sm" onClick={handleAddVideo}>등록</Button><Button size="sm" variant="outline" onClick={() => setIsAddingVideo(false)}>취소</Button></div>
+              <div className="space-y-3 rounded-xl border border-dashed border-primary/50 bg-primary/5 p-4">
+                <Input
+                  placeholder="YouTube URL을 입력하세요..."
+                  value={newVideoUrl}
+                  onChange={(e) => setNewVideoUrl(e.target.value)}
+                />
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={handleAddVideo}>등록하기</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setIsAddingVideo(false)}>취소</Button>
+                </div>
               </div>
             ) : (
-              <Button variant="outline" className="w-full border-dashed" onClick={() => setIsAddingVideo(true)}><Plus className="mr-2 size-4" /> 영상 추가</Button>
+              <Button variant="outline" className="w-full border-dashed py-8" onClick={() => setIsAddingVideo(true)}>
+                <Plus className="mr-2 size-4" /> 참고 영상 추가하기
+              </Button>
             )}
 
             <div className="space-y-3 border-t pt-4">
               <div className="flex items-center justify-between">
-                <label className="text-sm font-bold">기술 메모</label>
-                <Button size="sm" variant="outline" onClick={isEditingDescription ? handleSaveDesc : () => setIsEditingDescription(true)}>
+                <label className="text-sm font-semibold">나의 메모 / 기술 팁</label>
+                <Button 
+                  size="sm" 
+                  variant={isEditingDescription ? "default" : "secondary"} 
+                  onClick={isEditingDescription ? handleSaveDesc : () => setIsEditingDescription(true)}
+                >
                   {isEditingDescription ? "저장" : "수정"}
                 </Button>
               </div>
-              <Textarea className="min-h-[100px]" value={currentDescription} onChange={(e) => setCurrentDescription(e.target.value)} disabled={!isEditingDescription} placeholder="연습 팁 기록..." />
+              <Textarea
+                className="min-h-[120px] resize-none"
+                value={currentDescription}
+                onChange={(e) => setCurrentDescription(e.target.value)}
+                disabled={!isEditingDescription}
+                placeholder="연습 팁을 기록해보세요."
+              />
             </div>
           </div>
         </DialogContent>
