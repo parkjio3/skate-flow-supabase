@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import Link from "next/link"
+import { useSkateData } from "@/hooks/useSkateData" // 커스텀 훅 임포트
 
 // ... (Trick 타입 및 streetTricks 데이터는 기존과 동일)
 type Trick = {
@@ -132,74 +133,45 @@ const streetCategories = [
 export default function StreetPage() {
   const [selectedTrick, setSelectedTrick] = useState<Trick | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
-  const [trickDescriptions, setTrickDescriptions] = useState<Record<string, string>>({})
   const [currentDescription, setCurrentDescription] = useState("")
   const [isEditingDescription, setIsEditingDescription] = useState(false)
-  
-  // 영상 목록 상태
-  const [trickVideos, setTrickVideos] = useState<Record<string, string[]>>({})
   const [newVideoUrl, setNewVideoUrl] = useState("")
   const [isAddingVideo, setIsAddingVideo] = useState(false)
 
-  useEffect(() => {
-    const saved = localStorage.getItem("skateflow-descriptions")
-    if (saved) setTrickDescriptions(JSON.parse(saved))
-    
-    const savedVideos = localStorage.getItem("skateflow-videos")
-    if (savedVideos) setTrickVideos(JSON.parse(savedVideos))
-  }, [])
+  // 커스텀 훅 사용
+  const { descriptions, saveDescription, addVideo, deleteVideo, getTrickVideos } = useSkateData()
 
+  // 모달 열릴 때 상태 초기화
   useEffect(() => {
     if (selectedTrick) {
-      setCurrentDescription(trickDescriptions[selectedTrick.name] || "")
+      setCurrentDescription(descriptions[selectedTrick.name] || "")
       setIsEditingDescription(false)
       setNewVideoUrl("")
       setIsAddingVideo(false)
     }
-  }, [selectedTrick, trickDescriptions])
+  }, [selectedTrick, descriptions])
 
-  const saveDescription = () => {
+  const handleSaveDesc = () => {
     if (selectedTrick) {
-      const updated = { ...trickDescriptions, [selectedTrick.name]: currentDescription }
-      setTrickDescriptions(updated)
-      localStorage.setItem("skateflow-descriptions", JSON.stringify(updated))
+      saveDescription(selectedTrick.name, currentDescription)
       setIsEditingDescription(false)
     }
   }
 
-  // 현재 선택된 기술의 모든 영상 리스트를 가져오는 헬퍼 함수
-  const getCurrentVideos = () => {
-    if (!selectedTrick) return []
-    // localStorage에 저장된 영상이 있으면 그것을 사용, 없으면 데이터의 기본 영상(videoUrl)을 배열로 반환
-    return trickVideos[selectedTrick.name] || [selectedTrick.videoUrl]
-  }
-
-  const addVideo = () => {
+  const handleAddVideo = () => {
     if (selectedTrick && newVideoUrl.trim()) {
-      const currentList = getCurrentVideos()
-      const updatedList = [...currentList, newVideoUrl.trim()]
-      
-      const updatedVideos = { ...trickVideos, [selectedTrick.name]: updatedList }
-      setTrickVideos(updatedVideos)
-      localStorage.setItem("skateflow-videos", JSON.stringify(updatedVideos))
+      addVideo(selectedTrick.name, newVideoUrl, selectedTrick.videoUrl)
       setNewVideoUrl("")
       setIsAddingVideo(false)
     }
   }
 
-  // 영상 삭제 기능 (기본 영상 포함 모든 인덱스 대응)
-  const deleteVideo = (indexToDelete: number) => {
+  const handleDeleteVideo = (index: number) => {
     if (selectedTrick) {
-      const currentList = getCurrentVideos()
-      const updatedList = currentList.filter((_, index) => index !== indexToDelete)
-      
-      const updatedVideos = { ...trickVideos, [selectedTrick.name]: updatedList }
-      setTrickVideos(updatedVideos)
-      localStorage.setItem("skateflow-videos", JSON.stringify(updatedVideos))
+      deleteVideo(selectedTrick.name, index, selectedTrick.videoUrl)
     }
   }
 
-  // 검색 필터링
   const filteredCategories = streetCategories.map(cat => ({
     ...cat,
     tricks: cat.tricks.filter(t => t.name.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -207,54 +179,36 @@ export default function StreetPage() {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Header 영역 (기존과 동일) */}
       <header className="border-b border-border bg-card">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-4">
-              <Link href="/"><Button variant="ghost" size="icon"><ArrowLeft className="size-5" /></Button></Link>
-              <h1 className="font-mono text-2xl font-bold text-primary">SkateFlow</h1>
-            </div>
-
-            <div className="flex gap-2">
-              <Link href="/ramp"><Button variant="outline" size="sm">램프</Button></Link>
-              <Link href="/street"><Button variant="default" size="sm">스트릿</Button></Link>
-              <Link href="/transition"><Button variant="outline" size="sm">트랜지션</Button></Link>
-            </div>
-
-            <div className="flex flex-1 items-center gap-4 md:max-w-md">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="기술 검색..."
-                  className="pl-9"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-            </div>
-            <Button variant="ghost" size="icon"><User className="size-5" /></Button>
+        <div className="container mx-auto px-4 py-4 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-4">
+            <Link href="/"><Button variant="ghost" size="icon"><ArrowLeft className="size-5" /></Button></Link>
+            <h1 className="font-mono text-2xl font-bold text-primary">SkateFlow</h1>
           </div>
+          <div className="flex gap-2">
+            <Link href="/ramp"><Button variant="outline" size="sm">램프</Button></Link>
+            <Link href="/street"><Button variant="default" size="sm">스트릿</Button></Link>
+            <Link href="/transition"><Button variant="outline" size="sm">트랜지션</Button></Link>
+          </div>
+          <div className="flex flex-1 items-center gap-4 md:max-w-md relative">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input placeholder="기술 검색..." className="pl-9" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+          </div>
+          <Button variant="ghost" size="icon"><User className="size-5" /></Button>
         </div>
       </header>
 
+      {/* Main Content */}
       <main className="container mx-auto space-y-8 px-4 py-8">
-        <div>
-          <h2 className="font-mono text-3xl font-bold">스트릿 기술</h2>
-          <p className="mt-2 text-muted-foreground">Street Tricks</p>
-        </div>
-
+        <h2 className="font-mono text-3xl font-bold">스트릿 기술</h2>
         <div className="space-y-8">
           {filteredCategories.map((category) => (
             <div key={category.name} className="rounded-lg border border-border bg-card p-6 shadow-sm">
               <h3 className="mb-4 text-xl font-bold text-primary">{category.name}</h3>
               <div className="grid grid-cols-1 gap-2 md:grid-cols-3 lg:grid-cols-4">
                 {category.tricks.map((trick) => (
-                  <Button
-                    key={trick.id}
-                    variant="outline"
-                    className="h-auto justify-start py-3 text-left hover:border-primary/50"
-                    onClick={() => setSelectedTrick(trick)}
-                  >
+                  <Button key={trick.id} variant="outline" className="h-auto justify-start py-3 text-left hover:border-primary/50" onClick={() => setSelectedTrick(trick)}>
                     <span className="truncate text-sm">{trick.name}</span>
                   </Button>
                 ))}
@@ -264,81 +218,44 @@ export default function StreetPage() {
         </div>
       </main>
 
+      {/* Modal 영역 */}
       <Dialog open={!!selectedTrick} onOpenChange={() => setSelectedTrick(null)}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold">{selectedTrick?.name}</DialogTitle>
-          </DialogHeader>
-          
+          <DialogHeader><DialogTitle className="text-xl font-bold">{selectedTrick?.name}</DialogTitle></DialogHeader>
           <div className="space-y-6">
-            {/* 영상 리스트 섹션 */}
             <div className="space-y-4">
-              {getCurrentVideos().length > 0 ? (
-                getCurrentVideos().map((videoUrl, index) => (
-                  <div key={`${selectedTrick?.id}-${index}`} className="space-y-2 border-b pb-4 last:border-0">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold">영상 {index + 1}</span>
-                      <Button 
-                        size="sm" 
-                        variant="ghost" 
-                        className="text-destructive hover:bg-destructive/10"
-                        onClick={() => deleteVideo(index)}
-                      >
-                        <Trash2 className="mr-1 size-4" />
-                        삭제
-                      </Button>
-                    </div>
-                    <div className="aspect-video w-full overflow-hidden rounded-lg bg-black">
-                      <iframe
-                        src={videoUrl}
-                        title={`${selectedTrick?.name}-${index}`}
-                        className="size-full"
-                        allowFullScreen
-                      />
-                    </div>
+              {selectedTrick && getTrickVideos(selectedTrick.name, selectedTrick.videoUrl).map((videoUrl, index) => (
+                <div key={index} className="space-y-2 border-b pb-4 last:border-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold">영상 {index + 1}</span>
+                    <Button size="sm" variant="ghost" className="text-destructive hover:bg-destructive/10" onClick={() => handleDeleteVideo(index)}>
+                      <Trash2 className="mr-1 size-4" /> 삭제
+                    </Button>
                   </div>
-                ))
-              ) : (
-                <div className="py-8 text-center text-muted-foreground">
-                  등록된 영상이 없습니다. 아래 버튼으로 추가해주세요.
+                  <div className="aspect-video w-full overflow-hidden rounded-lg bg-black">
+                    <iframe src={videoUrl} title="video" className="size-full" allowFullScreen />
+                  </div>
                 </div>
-              )}
+              ))}
             </div>
 
-            {/* 영상 추가 영역 */}
             {isAddingVideo ? (
               <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
-                <Input
-                  placeholder="YouTube Embed URL을 입력하세요..."
-                  value={newVideoUrl}
-                  onChange={(e) => setNewVideoUrl(e.target.value)}
-                />
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={addVideo}>등록</Button>
-                  <Button size="sm" variant="outline" onClick={() => setIsAddingVideo(false)}>취소</Button>
-                </div>
+                <Input placeholder="YouTube Embed URL..." value={newVideoUrl} onChange={(e) => setNewVideoUrl(e.target.value)} />
+                <div className="flex gap-2"><Button size="sm" onClick={handleAddVideo}>등록</Button><Button size="sm" variant="outline" onClick={() => setIsAddingVideo(false)}>취소</Button></div>
               </div>
             ) : (
-              <Button variant="outline" className="w-full border-dashed" onClick={() => setIsAddingVideo(true)}>
-                <Plus className="mr-2 size-4" /> 영상 추가
-              </Button>
+              <Button variant="outline" className="w-full border-dashed" onClick={() => setIsAddingVideo(true)}><Plus className="mr-2 size-4" /> 영상 추가</Button>
             )}
 
-            {/* 설명 섹션 */}
             <div className="space-y-3 border-t pt-4">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-bold">기술 메모</label>
-                <Button size="sm" variant="outline" onClick={isEditingDescription ? saveDescription : () => setIsEditingDescription(true)}>
+                <Button size="sm" variant="outline" onClick={isEditingDescription ? handleSaveDesc : () => setIsEditingDescription(true)}>
                   {isEditingDescription ? "저장" : "수정"}
                 </Button>
               </div>
-              <Textarea
-                className="min-h-[100px]"
-                value={currentDescription}
-                onChange={(e) => setCurrentDescription(e.target.value)}
-                disabled={!isEditingDescription}
-                placeholder="연습 팁을 기록하세요..."
-              />
+              <Textarea className="min-h-[100px]" value={currentDescription} onChange={(e) => setCurrentDescription(e.target.value)} disabled={!isEditingDescription} placeholder="연습 팁 기록..." />
             </div>
           </div>
         </DialogContent>
