@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import Link from "next/link"
+import { useSkateData } from "@/hooks/useSkateData" // 커스텀 훅 임포트
 
 // ... (RankLevel, RankCategory, rampRanks 정의는 이전과 동일)
 type RankLevel = {
@@ -203,113 +204,74 @@ const rampRanks: RankCategory[] = [
 export default function RampPage() {
   const [selectedTrick, setSelectedTrick] = useState<{ name: string } | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
-  const [trickDescriptions, setTrickDescriptions] = useState<Record<string, string>>({})
   const [currentDescription, setCurrentDescription] = useState("")
   const [isEditingDescription, setIsEditingDescription] = useState(false)
-  
-  // 영상 목록 상태 관리
-  const [trickVideos, setTrickVideos] = useState<Record<string, string[]>>({})
   const [newVideoUrl, setNewVideoUrl] = useState("")
   const [isAddingVideo, setIsAddingVideo] = useState(false)
 
-  // 기본 영상 (데이터베이스나 API가 없을 경우를 위한 기본값)
+  // 기본 영상 URL
   const DEFAULT_VIDEO = "https://www.youtube.com/embed/dQw4w9WgXcQ"
 
-  useEffect(() => {
-    const savedDesc = localStorage.getItem("skateflow-descriptions")
-    if (savedDesc) setTrickDescriptions(JSON.parse(savedDesc))
-    
-    const savedVideos = localStorage.getItem("skateflow-videos")
-    if (savedVideos) setTrickVideos(JSON.parse(savedVideos))
-  }, [])
+  // 커스텀 훅 사용
+  const { descriptions, saveDescription, addVideo, deleteVideo, getTrickVideos } = useSkateData()
 
+  // 모달이 열릴 때 선택된 기술의 데이터 로드
   useEffect(() => {
     if (selectedTrick) {
-      setCurrentDescription(trickDescriptions[selectedTrick.name] || "")
+      setCurrentDescription(descriptions[selectedTrick.name] || "")
       setIsEditingDescription(false)
       setNewVideoUrl("")
       setIsAddingVideo(false)
     }
-  }, [selectedTrick, trickDescriptions])
+  }, [selectedTrick, descriptions])
 
-const saveDescription = () => {
+  const handleSaveDesc = () => {
     if (selectedTrick) {
-      const updated = { ...trickDescriptions, [selectedTrick.name]: currentDescription }
-      setTrickDescriptions(updated)
-      localStorage.setItem("skateflow-descriptions", JSON.stringify(updated))
+      saveDescription(selectedTrick.name, currentDescription)
       setIsEditingDescription(false)
     }
   }
 
-  // 영상 추가 로직
-  const addVideo = () => {
+  const handleAddVideo = () => {
     if (selectedTrick && newVideoUrl.trim()) {
-      // YouTube URL 변환 로직 (정규식을 사용해 embed용으로 변환하면 더 좋습니다)
+      // URL 변환 로직은 훅 내부에 넣거나 여기서 처리
       let embedUrl = newVideoUrl.trim()
-      if (embedUrl.includes("watch?v=")) {
-        embedUrl = embedUrl.replace("watch?v=", "embed/")
-      } else if (embedUrl.includes("youtu.be/")) {
-        embedUrl = embedUrl.replace("youtu.be/", "youtube.com/embed/")
-      }
+      if (embedUrl.includes("watch?v=")) embedUrl = embedUrl.replace("watch?v=", "embed/")
+      else if (embedUrl.includes("youtu.be/")) embedUrl = embedUrl.replace("youtu.be/", "youtube.com/embed/")
 
-      const currentList = trickVideos[selectedTrick.name] || [DEFAULT_VIDEO]
-      const updatedList = [...currentList, embedUrl]
-      const updatedVideos = { ...trickVideos, [selectedTrick.name]: updatedList }
-      
-      setTrickVideos(updatedVideos)
-      localStorage.setItem("skateflow-videos", JSON.stringify(updatedVideos))
+      addVideo(selectedTrick.name, embedUrl, DEFAULT_VIDEO)
       setNewVideoUrl("")
       setIsAddingVideo(false)
     }
   }
 
-  // 영상 삭제 로직
-  const deleteVideo = (indexToDelete: number) => {
+  const handleDeleteVideo = (index: number) => {
     if (selectedTrick) {
-      const currentList = trickVideos[selectedTrick.name] || [DEFAULT_VIDEO]
-      // 선택한 인덱스를 제외한 새 배열 생성
-      const updatedList = currentList.filter((_, index) => index !== indexToDelete)
-      
-      const updatedVideos = { ...trickVideos, [selectedTrick.name]: updatedList }
-      setTrickVideos(updatedVideos)
-      localStorage.setItem("skateflow-videos", JSON.stringify(updatedVideos))
+      deleteVideo(selectedTrick.name, index, DEFAULT_VIDEO)
     }
-  }
-
-  const handleTrickClick = (trickName: string) => {
-    setSelectedTrick({ name: trickName })
-  }
-
-  const getCurrentVideos = () => {
-    if (!selectedTrick) return []
-    // 저장된 영상이 없으면 기본 영상만 반환
-    return trickVideos[selectedTrick.name] || [DEFAULT_VIDEO]
   }
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {/* Header 섹션 (기존과 동일) */}
       <header className="border-b border-border bg-card">
         <div className="container mx-auto px-4 py-4">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-4">
-              <Link href="/">
-                <Button variant="ghost" size="icon"><ArrowLeft className="size-5" /></Button>
-              </Link>
+              <Link href="/"><Button variant="ghost" size="icon"><ArrowLeft className="size-5" /></Button></Link>
               <h1 className="font-mono text-2xl font-bold text-primary">SkateFlow</h1>
             </div>
-            {/* ... 카테고리 버튼 및 검색바 ... */}
             <div className="flex flex-1 items-center gap-4 md:max-w-md">
-               <div className="relative flex-1">
-                 <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                 <Input 
-                   placeholder="검색어 입력..." 
-                   className="pl-9" 
-                   value={searchQuery}
-                   onChange={(e) => setSearchQuery(e.target.value)}
-                 />
-               </div>
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input 
+                  placeholder="검색어 입력..." 
+                  className="pl-9" 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
             </div>
+            <Button variant="ghost" size="icon"><User className="size-5" /></Button>
           </div>
         </div>
       </header>
@@ -320,7 +282,6 @@ const saveDescription = () => {
           <p className="text-xl text-muted-foreground">K&B MINIRAMP RANK TEST</p>
         </div>
 
-        {/* 랭크 그리드 */}
         <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
           {rampRanks.map((rank) => (
             <div key={rank.name} className="rounded-xl border border-border bg-card p-6 shadow-sm">
@@ -339,7 +300,7 @@ const saveDescription = () => {
                       {level.tricks.map((trick, idx) => (
                         <li key={idx}>
                           <button
-                            onClick={() => handleTrickClick(trick)}
+                            onClick={() => setSelectedTrick({ name: trick })}
                             className="text-sm hover:text-primary underline decoration-primary/20 hover:decoration-primary transition-all"
                           >
                             {trick}
@@ -355,7 +316,6 @@ const saveDescription = () => {
         </div>
       </main>
 
-      {/* 기술 상세 다이얼로그 */}
       <Dialog open={!!selectedTrick} onOpenChange={() => setSelectedTrick(null)}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -363,74 +323,62 @@ const saveDescription = () => {
           </DialogHeader>
           
           <div className="space-y-6">
-            {/* 영상 목록 및 삭제 */}
             <div className="space-y-4">
-              {getCurrentVideos().map((videoUrl, index) => (
-                <div key={`${selectedTrick?.name}-video-${index}`} className="group relative space-y-2">
+              {selectedTrick && getTrickVideos(selectedTrick.name, DEFAULT_VIDEO).map((videoUrl, index) => (
+                <div key={index} className="group relative space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-muted-foreground">영상 #{index + 1}</span>
                     <Button 
                       size="sm" 
                       variant="destructive" 
-                      className="h-8 gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={() => deleteVideo(index)}
+                      className="h-8 gap-1"
+                      onClick={() => handleDeleteVideo(index)}
                     >
-                      <Trash2 className="size-3" />
-                      삭제
+                      <Trash2 className="size-3" /> 삭제
                     </Button>
                   </div>
                   <div className="aspect-video w-full overflow-hidden rounded-xl bg-black shadow-inner">
-                    <iframe
-                      src={videoUrl}
-                      title={`${selectedTrick?.name} video ${index + 1}`}
-                      className="size-full"
-                      allowFullScreen
-                    />
+                    <iframe src={videoUrl} className="size-full" allowFullScreen />
                   </div>
                 </div>
               ))}
             </div>
 
-            {/* 영상 추가 폼 */}
             {isAddingVideo ? (
               <div className="space-y-3 rounded-xl border border-dashed border-primary/50 bg-primary/5 p-4">
-                <h4 className="text-sm font-semibold">새로운 영상 링크 추가</h4>
                 <Input
-                  placeholder="YouTube URL을 입력하세요 (예: https://youtu.be/...)"
+                  placeholder="YouTube URL을 입력하세요..."
                   value={newVideoUrl}
                   onChange={(e) => setNewVideoUrl(e.target.value)}
-                  className="bg-background"
                 />
                 <div className="flex gap-2">
-                  <Button size="sm" onClick={addVideo}>등록하기</Button>
+                  <Button size="sm" onClick={handleAddVideo}>등록하기</Button>
                   <Button size="sm" variant="ghost" onClick={() => setIsAddingVideo(false)}>취소</Button>
                 </div>
               </div>
             ) : (
               <Button variant="outline" className="w-full border-dashed py-8" onClick={() => setIsAddingVideo(true)}>
-                <Plus className="mr-2 size-4" />
-                참고 영상 추가하기
+                <Plus className="mr-2 size-4" /> 참고 영상 추가하기
               </Button>
             )}
 
-            {/* 기술 설명 섹션 */}
             <div className="space-y-3 border-t pt-4">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-semibold">나의 메모 / 기술 팁</label>
                 <Button 
                   size="sm" 
                   variant={isEditingDescription ? "default" : "secondary"} 
-                  onClick={isEditingDescription ? saveDescription : () => setIsEditingDescription(true)}
+                  onClick={isEditingDescription ? handleSaveDesc : () => setIsEditingDescription(true)}
                 >
                   {isEditingDescription ? "저장" : "수정"}
                 </Button>
               </div>
               <Textarea
-                placeholder="연습 시 주의사항이나 본인만의 팁을 적어보세요."
                 className="min-h-[120px] resize-none"
                 value={currentDescription}
                 onChange={(e) => setCurrentDescription(e.target.value)}
                 disabled={!isEditingDescription}
+                placeholder="연습 팁을 기록해보세요."
               />
             </div>
           </div>
