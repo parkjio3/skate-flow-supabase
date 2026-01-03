@@ -84,6 +84,7 @@ const rampRanks: RankCategory[] = [
       },
     ],
   },
+  {
     name: "플래티넘",
     color: "from-slate-400 to-slate-600",
     levels: [
