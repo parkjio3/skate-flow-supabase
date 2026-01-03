@@ -33,14 +33,15 @@ const rampRanks: RankCategory[] = [
     ],
   },
   {
-    name: "에메랄드",
-    color: "from-emerald-500 to-emerald-700",
+    name: "브론즈",
+    color: "from-amber-600 to-amber-800",
     levels: [
-      { level: 3, description: "틱택을 활용한 스톨 (앞꿈치중심)", tricks: ["F/S피블스톨", "B/S스미스스톨"] },
-      { level: 2, description: "킥턴과 180알리를 활용한 락", tricks: ["행업", "B/S디제스터", "F/S디제스터"] },
-      { level: 1, description: "테일탭과 알리를 활용한", tricks: ["블런트 락투페이키", "블런트 노즈그랩 페이키"] },
+      { level: 3, description: "틱택을 활용한 스톨 (뒷꿈치중심)", tricks: ["페이키 F/S엑슬스톨", "페이키 F/S스미스스톨"] },
+      { level: 2, description: "틱택을 활용한 스톨 (뒷꿈치중심)", tricks: ["B/S피블스톨", "B/S엑슬스톨"] },
+      { level: 1, description: "틱택을 활용한 스톨 (앞꿈치중심)", tricks: ["페이키 B/S엑슬스톨", "페이키 B/S스미스스톨"] },
     ],
   },
+]
   // ... (다른 랭크 데이터 생략 가능하나 구조 유지를 위해 포함)
   {
     name: "브론즈",
@@ -53,23 +54,23 @@ const rampRanks: RankCategory[] = [
   },
 ]
   {
-    name: "다이아몬드",
-    color: "from-sky-400 to-sky-600",
+    name: "실버",
+    color: "from-gray-400 to-gray-600",
     levels: [
       {
         level: 3,
-        description: "틱택을 활용한 페이키아웃",
-        tricks: ["B/S피블스톨 페이키", "B/S파이브오 페이키"],
+        description: "킥턴을 활용한 락",
+        tricks: ["F/S하프캡 락투페이키", "F/S락앤롤"],
       },
       {
         level: 2,
-        description: "앤드워크를 활용한 페이키아웃",
-        tricks: ["F/S스미스스톨 페이키", "F/S파이브오 페이키"],
+        description: "앤드워크를 활용한 스위치 락",
+        tricks: ["스위치 F/S락", "스위치 B/S락앤롤"],
       },
       {
         level: 1,
-        description: "테일탭과 알리를 활용한",
-        tricks: ["블런트 페이키", "널리 디제스터"],
+        description: "앤드워크를 활용한 페이키아웃",
+        tricks: ["B/S엑슬스톨 페이키", "페이키 B/S엑슬스톨 페이키"],
       },
     ],
   },
@@ -95,27 +96,6 @@ const rampRanks: RankCategory[] = [
     ],
   },
   {
-    name: "마스터",
-    color: "from-purple-500 to-purple-700",
-    levels: [
-      {
-        level: 3,
-        description: "락앤롤을 활용한 스톨",
-        tricks: ["B/S허리케인", "F/S허리케인"],
-      },
-      {
-        level: 2,
-        description: "노즈탭과 널리를 활용한",
-        tricks: ["스위치블런트 락투페이키", "스위치블런트"],
-      },
-      {
-        level: 1,
-        description: "킥턴과 180알리를 활용한 스톨",
-        tricks: ["F/S테일스톨 (or린테일)", "B/S테일스톨 (or바디자)"],
-      },
-    ],
-  },
-  {
     name: "골드",
     color: "from-yellow-500 to-yellow-700",
     levels: [
@@ -133,6 +113,78 @@ const rampRanks: RankCategory[] = [
         level: 1,
         description: "앤드워크를 활용한 페이키아웃",
         tricks: ["페이키 F/S엑슬스톨 페이키", "F/S엑슬스톨 페이키", "페이키 F/S스미스스톨 페이키"],
+      },
+    ],
+  },
+    name: "플래티넘",
+    color: "from-slate-400 to-slate-600",
+    levels: [
+      {
+        level: 3,
+        description: "노즈탭과 앤드워크를 활용한",
+        tricks: ["노즈스톨", "스위치B/S락", "스위치F/S락앤롤"],
+      },
+      {
+        level: 2,
+        description: "앤드워크를 활용한 리버트",
+        tricks: ["테일스톨 B/S리버트", "테일스톨 F/S리버트"],
+      },
+      {
+        level: 1,
+        description: "틱택과 테일탭을 활용한 스톨",
+        tricks: ["B/S파이브오", "F/S파이브오"],
+      },
+    ],
+  },
+  {
+    name: "에메랄드",
+    color: "from-emerald-500 to-emerald-700",
+    levels: [
+      { level: 3, description: "틱택을 활용한 스톨 (앞꿈치중심)", tricks: ["F/S피블스톨", "B/S스미스스톨"] },
+      { level: 2, description: "킥턴과 180알리를 활용한 락", tricks: ["행업", "B/S디제스터", "F/S디제스터"] },
+      { level: 1, description: "테일탭과 알리를 활용한", tricks: ["블런트 락투페이키", "블런트 노즈그랩 페이키"] },
+    ],
+  },
+  // ... (다른 랭크 데이터 생략 가능하나 구조 유지를 위해 포함)
+  {
+    name: "다이아몬드",
+    color: "from-sky-400 to-sky-600",
+    levels: [
+      {
+        level: 3,
+        description: "틱택을 활용한 페이키아웃",
+        tricks: ["B/S피블스톨 페이키", "B/S파이브오 페이키"],
+      },
+      {
+        level: 2,
+        description: "앤드워크를 활용한 페이키아웃",
+        tricks: ["F/S스미스스톨 페이키", "F/S파이브오 페이키"],
+      },
+      {
+        level: 1,
+        description: "테일탭과 알리를 활용한",
+        tricks: ["블런트 페이키", "널리 디제스터"],
+      },
+    ],
+  },
+  {
+    name: "마스터",
+    color: "from-purple-500 to-purple-700",
+    levels: [
+      {
+        level: 3,
+        description: "락앤롤을 활용한 스톨",
+        tricks: ["B/S허리케인", "F/S허리케인"],
+      },
+      {
+        level: 2,
+        description: "노즈탭과 널리를 활용한",
+        tricks: ["스위치블런트 락투페이키", "스위치블런트"],
+      },
+      {
+        level: 1,
+        description: "킥턴과 180알리를 활용한 스톨",
+        tricks: ["F/S테일스톨 (or린테일)", "B/S테일스톨 (or바디자)"],
       },
     ],
   },
@@ -158,27 +210,6 @@ const rampRanks: RankCategory[] = [
     ],
   },
   {
-    name: "플래티넘",
-    color: "from-slate-400 to-slate-600",
-    levels: [
-      {
-        level: 3,
-        description: "노즈탭과 앤드워크를 활용한",
-        tricks: ["노즈스톨", "스위치B/S락", "스위치F/S락앤롤"],
-      },
-      {
-        level: 2,
-        description: "앤드워크를 활용한 리버트",
-        tricks: ["테일스톨 B/S리버트", "테일스톨 F/S리버트"],
-      },
-      {
-        level: 1,
-        description: "틱택과 테일탭을 활용한 스톨",
-        tricks: ["B/S파이브오", "F/S파이브오"],
-      },
-    ],
-  },
-  {
     name: "챌린저",
     color: "from-cyan-400 to-cyan-600",
     levels: [
@@ -195,7 +226,7 @@ const rampRanks: RankCategory[] = [
       {
         level: 1,
         description: "180알리를 활용한 노즈",
-        tricks: ["B/S노즈팩", "F/S노즈팩"],
+        tricks: ["B/S노즈픽", "F/S노즈픽"],
       },
     ],
   },
