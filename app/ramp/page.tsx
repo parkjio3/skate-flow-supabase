@@ -38,7 +38,7 @@ const rampRanks: RankCategory[] = [
       {
         level: 1,
         description: "킥턴 활용한 락",
-        tricks: ["B/S하프팩 락투페이키", "B/S락앤롤", "B/S하프팩 락앤롤"],
+        tricks: ["B/S하프캡 락투페이키", "B/S락앤롤", "B/S하프캡 락앤롤"],
       },
     ],
   },
@@ -227,7 +227,7 @@ const rampRanks: RankCategory[] = [
       {
         level: 1,
         description: "180알리를 활용한 노즈",
-        tricks: ["B/S노즈팩", "F/S노즈팩"],
+        tricks: ["B/S노즈픽", "F/S노즈픽"],
       },
     ],
   },
