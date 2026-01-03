@@ -41,7 +41,6 @@ const rampRanks: RankCategory[] = [
       { level: 1, description: "틱택을 활용한 스톨 (앞꿈치중심)", tricks: ["페이키 B/S엑슬스톨", "페이키 B/S스미스스톨"] },
     ],
   },
-]
   // ... (다른 랭크 데이터 생략 가능하나 구조 유지를 위해 포함)
   {
     name: "브론즈",
@@ -52,7 +51,6 @@ const rampRanks: RankCategory[] = [
       { level: 1, description: "틱택을 활용한 스톨 (앞꿈치중심)", tricks: ["페이키 B/S엑슬스톨", "페이키 B/S스미스스톨"] },
     ],
   },
-]
   {
     name: "실버",
     color: "from-gray-400 to-gray-600",
