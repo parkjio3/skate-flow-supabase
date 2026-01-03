@@ -32,15 +32,6 @@ const rampRanks: RankCategory[] = [
       { level: 1, description: "킥턴 활용한 락", tricks: ["B/S하프팩 락투페이키", "B/S락앤롤", "B/S하프팩 락앤롤"] },
     ],
   },
-  {
-    name: "브론즈",
-    color: "from-amber-600 to-amber-800",
-    levels: [
-      { level: 3, description: "틱택을 활용한 스톨 (뒷꿈치중심)", tricks: ["페이키 F/S엑슬스톨", "페이키 F/S스미스스톨"] },
-      { level: 2, description: "틱택을 활용한 스톨 (뒷꿈치중심)", tricks: ["B/S피블스톨", "B/S엑슬스톨"] },
-      { level: 1, description: "틱택을 활용한 스톨 (앞꿈치중심)", tricks: ["페이키 B/S엑슬스톨", "페이키 B/S스미스스톨"] },
-    ],
-  },
   // ... (다른 랭크 데이터 생략 가능하나 구조 유지를 위해 포함)
   {
     name: "브론즈",
@@ -49,27 +40,6 @@ const rampRanks: RankCategory[] = [
       { level: 3, description: "틱택을 활용한 스톨 (뒷꿈치중심)", tricks: ["페이키 F/S엑슬스톨", "페이키 F/S스미스스톨"] },
       { level: 2, description: "틱택을 활용한 스톨 (뒷꿈치중심)", tricks: ["B/S피블스톨", "B/S엑슬스톨"] },
       { level: 1, description: "틱택을 활용한 스톨 (앞꿈치중심)", tricks: ["페이키 B/S엑슬스톨", "페이키 B/S스미스스톨"] },
-    ],
-  },
-  {
-    name: "실버",
-    color: "from-gray-400 to-gray-600",
-    levels: [
-      {
-        level: 3,
-        description: "킥턴을 활용한 락",
-        tricks: ["F/S하프캡 락투페이키", "F/S락앤롤"],
-      },
-      {
-        level: 2,
-        description: "앤드워크를 활용한 스위치 락",
-        tricks: ["스위치 F/S락", "스위치 B/S락앤롤"],
-      },
-      {
-        level: 1,
-        description: "앤드워크를 활용한 페이키아웃",
-        tricks: ["B/S엑슬스톨 페이키", "페이키 B/S엑슬스톨 페이키"],
-      },
     ],
   },
   {
