@@ -8,14 +8,24 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Textarea } from "@/components/ui/textarea"
 import Link from "next/link"
 
-// --- 유튜브 및 인스타그램 주소 변환 유틸리티 ---
+// --- 유튜브 및 인스타그램 주소 변환 유틸리티 (시간 링크 기능 포함) ---
 const convertToEmbedUrl = (url: string) => {
   if (!url) return "";
   try {
     const parsedUrl = new URL(url);
+    
     // 1. 유튜브 처리
     if (url.includes("youtube.com") || url.includes("youtu.be")) {
       let videoId = "";
+      let startTime = "";
+
+      // 시간 파라미터 추출 (t=80s, t=80 등)
+      const t = parsedUrl.searchParams.get("t") || parsedUrl.searchParams.get("start");
+      if (t) {
+        // 's'가 붙어있으면 제거하고 숫자만 추출
+        startTime = t.replace("s", "");
+      }
+
       if (url.includes("shorts/")) {
         videoId = parsedUrl.pathname.split("/")[2];
       } else if (url.includes("youtu.be/")) {
@@ -23,11 +33,22 @@ const convertToEmbedUrl = (url: string) => {
       } else if (url.includes("v=")) {
         videoId = parsedUrl.searchParams.get("v") || "";
       }
+
       if (videoId && videoId.includes("?")) {
         videoId = videoId.split("?")[0];
       }
-      return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
+
+      if (videoId) {
+        let embedUrl = `https://www.youtube.com/embed/${videoId}`;
+        // 시간 파라미터가 있다면 ?start=초 형식으로 추가
+        if (startTime) {
+          embedUrl += `?start=${startTime}`;
+        }
+        return embedUrl;
+      }
+      return url;
     }
+
     // 2. 인스타그램 처리
     if (url.includes("instagram.com")) {
       let baseUrl = url.split("?")[0];
@@ -36,6 +57,7 @@ const convertToEmbedUrl = (url: string) => {
       }
       return `${baseUrl}/embed`;
     }
+
     return url;
   } catch (e) {
     return url;
@@ -333,6 +355,7 @@ export default function RampPage() {
                       <div className="flex items-center gap-2 text-xs font-bold opacity-50">
                         {url.includes("instagram") ? <Instagram className="size-3"/> : <Youtube className="size-3"/>}
                         VIDEO #{i+1}
+                        {url.includes("start=") && <span className="text-[10px] bg-primary/10 text-primary px-1 rounded">시간 지정됨</span>}
                       </div>
                       <div className="flex gap-1">
                         <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => startEditVideo(i, url)}>
@@ -350,7 +373,7 @@ export default function RampPage() {
                           className="h-9 text-sm" 
                           value={editingVideoUrl} 
                           onChange={(e) => setEditingVideoUrl(e.target.value)}
-                          placeholder="새로운 주소 입력"
+                          placeholder="주소 (예: ...&t=80s)"
                         />
                         <Button size="sm" className="h-9 px-2" onClick={() => saveEditVideo(i)}><Check className="size-4"/></Button>
                         <Button size="sm" variant="ghost" className="h-9 px-2" onClick={() => setEditingVideoIdx(null)}><X className="size-4"/></Button>
@@ -368,7 +391,8 @@ export default function RampPage() {
             <div className="pt-4 border-t">
               {isAddingVideo ? (
                 <div className="flex flex-col gap-2">
-                  <Input placeholder="유튜브 또는 인스타그램 주소" value={newVideoUrl} onChange={(e) => setNewVideoUrl(e.target.value)} />
+                  <Input placeholder="유튜브(시간지정 가능) 또는 인스타그램 주소" value={newVideoUrl} onChange={(e) => setNewVideoUrl(e.target.value)} />
+                  <p className="text-[10px] text-muted-foreground px-1">* 유튜브 주소 뒤에 &t=80s 를 붙이면 80초부터 재생됩니다.</p>
                   <div className="flex gap-2 justify-end">
                     <Button variant="ghost" size="sm" onClick={() => setIsAddingVideo(false)}>취소</Button>
                     <Button size="sm" onClick={addVideo}>영상 등록</Button>
