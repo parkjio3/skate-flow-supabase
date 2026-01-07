@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Search, User, ArrowLeft, Plus, Trash2, Instagram, Youtube } from "lucide-react"
+import { Search, User, ArrowLeft, Plus, Trash2, Instagram, Youtube, Edit2, Check, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -13,7 +13,7 @@ const convertToEmbedUrl = (url: string) => {
   if (!url) return "";
   try {
     const parsedUrl = new URL(url);
-    // 1. 유튜브 처리 (일반, Shorts, 단축 URL 모두 대응)
+    // 1. 유튜브 처리
     if (url.includes("youtube.com") || url.includes("youtu.be")) {
       let videoId = "";
       if (url.includes("shorts/")) {
@@ -156,6 +156,8 @@ export default function RampPage() {
   const [trickVideos, setTrickVideos] = useState<Record<string, string[]>>({})
   const [newVideoUrl, setNewVideoUrl] = useState("")
   const [isAddingVideo, setIsAddingVideo] = useState(false)
+  const [editingVideoIdx, setEditingVideoIdx] = useState<number | null>(null)
+  const [editingVideoUrl, setEditingVideoUrl] = useState("")
   const [isSearchFocused, setIsSearchFocused] = useState(false)
   const searchRef = useRef<HTMLDivElement>(null)
 
@@ -179,6 +181,7 @@ export default function RampPage() {
       setIsEditingDescription(false)
       setNewVideoUrl("")
       setIsAddingVideo(false)
+      setEditingVideoIdx(null)
     }
   }, [selectedTrick, trickDescriptions])
 
@@ -210,6 +213,23 @@ export default function RampPage() {
     }
   }
 
+  const startEditVideo = (idx: number, url: string) => {
+    setEditingVideoIdx(idx)
+    setEditingVideoUrl(url)
+  }
+
+  const saveEditVideo = (idx: number) => {
+    if (selectedTrick && editingVideoUrl.trim()) {
+      const embedUrl = convertToEmbedUrl(editingVideoUrl.trim());
+      const current = [...(trickVideos[selectedTrick.name] || [])]
+      current[idx] = embedUrl
+      const updated = { ...trickVideos, [selectedTrick.name]: current }
+      setTrickVideos(updated)
+      localStorage.setItem("skateflow-ramp-videos", JSON.stringify(updated))
+      setEditingVideoIdx(null)
+    }
+  }
+
   const deleteVideo = (idx: number) => {
     if (selectedTrick) {
       const current = trickVideos[selectedTrick.name] || []
@@ -227,7 +247,6 @@ export default function RampPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {/* --- HEADER --- */}
       <header className="border-b bg-card sticky top-0 z-40">
         <div className="container mx-auto px-4 py-4">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -252,11 +271,7 @@ export default function RampPage() {
               {isSearchFocused && searchResults.length > 0 && (
                 <div className="absolute top-full left-0 right-0 z-50 mt-2 max-h-[300px] overflow-y-auto rounded-md border bg-popover shadow-xl p-1">
                   {searchResults.map((r, i) => (
-                    <button 
-                      key={i} 
-                      onClick={() => handleTrickClick(r.name)} 
-                      className="flex w-full flex-col p-2 hover:bg-accent rounded-sm text-left"
-                    >
+                    <button key={i} onClick={() => handleTrickClick(r.name)} className="flex w-full flex-col p-2 hover:bg-accent rounded-sm text-left">
                       <span className="text-sm font-bold">{r.name}</span>
                       <span className="text-xs text-muted-foreground">{r.rankName} Lv.{r.level}</span>
                     </button>
@@ -269,7 +284,6 @@ export default function RampPage() {
         </div>
       </header>
 
-      {/* --- MAIN CONTENT --- */}
       <main className="container mx-auto px-4 py-8">
         <div className="mb-10 text-center">
           <h2 className="text-5xl font-black italic tracking-tighter text-primary">KBRT</h2>
@@ -292,11 +306,7 @@ export default function RampPage() {
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {lv.tricks.map((trick, i) => (
-                        <button 
-                          key={i} 
-                          onClick={() => handleTrickClick(trick)}
-                          className="text-xs px-2 py-1 rounded bg-muted hover:bg-primary hover:text-white transition-colors"
-                        >
+                        <button key={i} onClick={() => handleTrickClick(trick)} className="text-xs px-2 py-1 rounded bg-muted hover:bg-primary hover:text-white transition-colors">
                           {trick}
                         </button>
                       ))}
@@ -309,87 +319,72 @@ export default function RampPage() {
         </div>
       </main>
 
-      {/* --- TRICK DETAIL DIALOG --- */}
       <Dialog open={!!selectedTrick} onOpenChange={() => setSelectedTrick(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-black italic">{selectedTrick?.name}</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle className="text-2xl font-black italic">{selectedTrick?.name}</DialogTitle></DialogHeader>
           <div className="space-y-6">
-            {/* 영상 목록 구역 */}
-            <div className="space-y-6">
+            <div className="space-y-8">
               {(trickVideos[selectedTrick?.name || ""] || []).length === 0 ? (
-                <div className="aspect-video flex items-center justify-center border-2 border-dashed rounded-xl text-muted-foreground text-sm">
-                  유튜브/인스타 영상을 추가하세요.
-                </div>
+                <div className="aspect-video flex items-center justify-center border-2 border-dashed rounded-xl text-muted-foreground text-sm">유튜브/인스타 영상을 추가하세요.</div>
               ) : (
                 trickVideos[selectedTrick?.name || ""].map((url, i) => (
-                  <div key={i} className="space-y-2 pb-4 border-b last:border-0">
+                  <div key={i} className="space-y-3 pb-6 border-b last:border-0">
                     <div className="flex justify-between items-center">
                       <div className="flex items-center gap-2 text-xs font-bold opacity-50">
                         {url.includes("instagram") ? <Instagram className="size-3"/> : <Youtube className="size-3"/>}
                         VIDEO #{i+1}
                       </div>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="h-6 text-destructive" 
-                        onClick={() => deleteVideo(i)}
-                      >
-                        <Trash2 className="size-3 mr-1"/>삭제
-                      </Button>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => startEditVideo(i, url)}>
+                          <Edit2 className="size-3 mr-1"/>수정
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive" onClick={() => deleteVideo(i)}>
+                          <Trash2 className="size-3 mr-1"/>삭제
+                        </Button>
+                      </div>
                     </div>
-                    {/* 영상 컨테이너: 인스타그램은 세로 비율(4:5), 유튜브는 가로 비율(16:9) 대응 */}
-                    <div 
-                      className="relative w-full overflow-hidden rounded-xl bg-black shadow-lg"
-                      style={{ paddingTop: url.includes("instagram") ? "125%" : "56.25%" }}
-                    >
-                      <iframe 
-                        src={url} 
-                        className="absolute top-0 left-0 w-full h-full" 
-                        allowFullScreen 
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                      />
-                    </div>
+                    
+                    {editingVideoIdx === i ? (
+                      <div className="flex gap-2 bg-muted p-3 rounded-lg animate-in fade-in zoom-in duration-200">
+                        <Input 
+                          className="h-9 text-sm" 
+                          value={editingVideoUrl} 
+                          onChange={(e) => setEditingVideoUrl(e.target.value)}
+                          placeholder="새로운 주소 입력"
+                        />
+                        <Button size="sm" className="h-9 px-2" onClick={() => saveEditVideo(i)}><Check className="size-4"/></Button>
+                        <Button size="sm" variant="ghost" className="h-9 px-2" onClick={() => setEditingVideoIdx(null)}><X className="size-4"/></Button>
+                      </div>
+                    ) : (
+                      <div className="relative w-full overflow-hidden rounded-xl bg-black shadow-lg" style={{ paddingTop: url.includes("instagram") ? "125%" : "56.25%" }}>
+                        <iframe src={url} className="absolute top-0 left-0 w-full h-full" allowFullScreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" />
+                      </div>
+                    )}
                   </div>
                 ))
               )}
             </div>
 
-            {/* 영상 추가 폼 */}
             <div className="pt-4 border-t">
               {isAddingVideo ? (
                 <div className="flex flex-col gap-2">
-                  <Input 
-                    placeholder="유튜브 또는 인스타그램 주소" 
-                    value={newVideoUrl} 
-                    onChange={(e) => setNewVideoUrl(e.target.value)} 
-                  />
+                  <Input placeholder="유튜브 또는 인스타그램 주소" value={newVideoUrl} onChange={(e) => setNewVideoUrl(e.target.value)} />
                   <div className="flex gap-2 justify-end">
                     <Button variant="ghost" size="sm" onClick={() => setIsAddingVideo(false)}>취소</Button>
                     <Button size="sm" onClick={addVideo}>영상 등록</Button>
                   </div>
                 </div>
               ) : (
-                <Button 
-                  variant="outline" 
-                  className="w-full border-dashed" 
-                  onClick={() => setIsAddingVideo(true)}
-                >
-                  <Plus className="mr-2 size-4"/>새 영상 추가 (유튜브/인스타)
+                <Button variant="outline" className="w-full border-dashed" onClick={() => setIsAddingVideo(true)}>
+                  <Plus className="mr-2 size-4"/>새 영상 추가
                 </Button>
               )}
             </div>
 
-            {/* 노하우/팁 메모 구역 */}
             <div className="space-y-2 border-t pt-4">
               <div className="flex justify-between items-center">
                 <span className="text-xs font-bold">노하우 & 팁</span>
-                <Button 
-                  size="sm" 
-                  variant="ghost" 
-                  onClick={() => isEditingDescription ? saveDescription() : setIsEditingDescription(true)}
-                >
+                <Button size="sm" variant="ghost" onClick={() => isEditingDescription ? saveDescription() : setIsEditingDescription(true)}>
                   {isEditingDescription ? "저장" : "수정"}
                 </Button>
               </div>
@@ -397,7 +392,7 @@ export default function RampPage() {
                 value={currentDescription} 
                 onChange={(e) => setCurrentDescription(e.target.value)} 
                 disabled={!isEditingDescription} 
-                className="min-h-[100px] bg-muted/30 border-none resize-none focus-visible:ring-1" 
+                className="min-h-[100px] bg-muted/30 border-none resize-none" 
                 placeholder="기술 성공을 위한 팁을 입력하세요..."
               />
             </div>
