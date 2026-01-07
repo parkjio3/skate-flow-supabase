@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Search, User, ArrowLeft, Plus, Trash2, Instagram, Youtube, Edit2, Check, X, PlayCircle, ExternalLink } from "lucide-react"
+import { Search, User, ArrowLeft, Plus, Trash2, Instagram, Youtube, Edit2, Check, X, PlayCircle, ExternalLink, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -12,6 +12,7 @@ import Link from "next/link"
 const convertToEmbedUrl = (url: string, startTime?: number) => {
   if (!url) return "";
   try {
+    // 유튜브 처리
     if (url.includes("youtube.com") || url.includes("youtu.be") || url.includes("youtube.com/embed/")) {
       let videoId = "";
       if (url.includes("youtube.com/embed/")) {
@@ -27,15 +28,14 @@ const convertToEmbedUrl = (url: string, startTime?: number) => {
 
       if (videoId) {
         const start = startTime !== undefined ? startTime : 0;
-        // 유튜브는 iframe 내에서 start 파라미터로 시간 이동 가능
         return `https://www.youtube.com/embed/${videoId}?start=${start}&autoplay=1`;
       }
     }
 
+    // 인스타그램 처리 (임베드용)
     if (url.includes("instagram.com")) {
       let baseUrl = url.split("?")[0];
       if (baseUrl.endsWith("/")) baseUrl = baseUrl.slice(0, -1);
-      // 인스타그램 임베드는 시간 이동을 지원하지 않으므로 기본 임베드 주소만 반환
       return `${baseUrl}/embed`;
     }
 
@@ -107,14 +107,16 @@ export default function RampPage() {
       const targetUrl = videos[videoIndex];
       
       if (targetUrl) {
-        // 인스타그램인 경우: 새 탭에서 시간 파라미터가 적용된 페이지 열기
         if (targetUrl.includes("instagram.com")) {
-          const originalUrl = targetUrl.replace("/embed", "");
-          const timeUrl = `${originalUrl}${originalUrl.includes("?") ? "&" : "?"}t=${totalSeconds}s`;
-          window.open(timeUrl, "_blank");
-        } 
-        // 유튜브인 경우: iframe 주소를 업데이트하여 내부에서 시간 점프
-        else {
+          // 인스타그램: /embed를 제거하고 원본 URL에 ?t=XXs 형식으로 새 탭 연결
+          let cleanUrl = targetUrl.replace("/embed", "").split("?")[0];
+          if (cleanUrl.endsWith("/")) cleanUrl = cleanUrl.slice(0, -1);
+          
+          // 최종 주소: https://www.instagram.com/reels/CODE/?t=10s
+          const finalUrl = `${cleanUrl}/?t=${totalSeconds}s`;
+          window.open(finalUrl, "_blank");
+        } else {
+          // 유튜브: iframe 내부 주소 업데이트
           const updatedVideos = [...videos];
           updatedVideos[videoIndex] = convertToEmbedUrl(targetUrl, totalSeconds);
           setTrickVideos({ ...trickVideos, [selectedTrick.name]: updatedVideos });
@@ -133,7 +135,8 @@ export default function RampPage() {
       if (parts[i + 1] && parts[i + 2]) {
         const videoNum = parseInt(parts[i + 1]);
         const timeStr = parts[i + 2];
-        const isInstagram = (trickVideos[selectedTrick?.name || ""]?.[videoNum - 1] || "").includes("instagram");
+        const videoUrl = trickVideos[selectedTrick?.name || ""]?.[videoNum - 1] || "";
+        const isInstagram = videoUrl.includes("instagram");
 
         elements.push(
           <button
@@ -205,6 +208,10 @@ export default function RampPage() {
     setIsSearchFocused(false)
   }
 
+  const searchResults = searchQuery
+    ? rampRanks.flatMap(r => r.levels.flatMap(l => l.tricks.filter(t => t.includes(searchQuery)).map(t => ({ name: t, rankName: r.name, level: l.level }))))
+    : []
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b bg-card sticky top-0 z-40">
@@ -213,11 +220,6 @@ export default function RampPage() {
             <div className="flex items-center gap-4">
               <Link href="/"><Button variant="ghost" size="icon"><ArrowLeft className="size-5" /></Button></Link>
               <h1 className="font-mono text-2xl font-bold text-primary">SkateFlow</h1>
-            </div>
-            <div className="flex gap-2">
-              <Link href="/ramp"><Button variant="default" size="sm">램프</Button></Link>
-              <Link href="/street"><Button variant="outline" size="sm">스트릿</Button></Link>
-              <Link href="/transition"><Button variant="outline" size="sm">트랜지션</Button></Link>
             </div>
             <div className="relative flex-1 md:max-w-md" ref={searchRef}>
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -282,7 +284,7 @@ export default function RampPage() {
                       </div>
                     ) : (
                       <div className="relative w-full overflow-hidden rounded-xl bg-black shadow-lg" style={{ paddingTop: url.includes("instagram") ? "125%" : "56.25%" }}>
-                        <iframe src={url} className="absolute top-0 left-0 w-full h-full" allowFullScreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" />
+                        <iframe src={url} className="absolute top-0 left-0 w-full h-full" allowFullScreen />
                       </div>
                     )}
                   </div>
@@ -307,7 +309,9 @@ export default function RampPage() {
                 <Button size="sm" variant="ghost" onClick={() => isEditingDescription ? saveDescription() : setIsEditingDescription(true)}>{isEditingDescription ? "저장" : "수정"}</Button>
               </div>
               {isEditingDescription ? (
-                <Textarea value={currentDescription} onChange={(e) => setCurrentDescription(e.target.value)} className="min-h-[120px] bg-muted/30 border-none resize-none" placeholder="영상1(00:20) 처럼 작성하세요." />
+                <div className="space-y-2">
+                  <Textarea value={currentDescription} onChange={(e) => setCurrentDescription(e.target.value)} className="min-h-[120px] bg-muted/30 border-none resize-none" placeholder="영상1(00:20) 처럼 작성하세요." />
+                </div>
               ) : (
                 <div className="p-3 rounded-md bg-muted/30 text-sm min-h-[60px]">
                   {currentDescription ? renderDescriptionWithLinks(currentDescription) : <span className="text-muted-foreground italic">팁이 없습니다.</span>}
