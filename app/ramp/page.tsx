@@ -29,7 +29,6 @@ const convertToEmbedUrl = (url: string) => {
   else if (url.includes("embed/")) {
     return url;
   }
-
   return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
 };
 
