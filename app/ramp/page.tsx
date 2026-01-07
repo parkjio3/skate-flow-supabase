@@ -8,6 +8,31 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Textarea } from "@/components/ui/textarea"
 import Link from "next/link"
 
+// --- 유튜브 주소 변환 유틸리티 함수 ---
+const convertToEmbedUrl = (url: string) => {
+  if (!url) return "";
+  let videoId = "";
+  
+  // 1. shorts 주소 체크 (https://youtube.com/shorts/ID)
+  if (url.includes("shorts/")) {
+    videoId = url.split("shorts/")[1].split("?")[0];
+  } 
+  // 2. youtu.be 주소 체크 (https://youtu.be/ID)
+  else if (url.includes("youtu.be/")) {
+    videoId = url.split("youtu.be/")[1].split("?")[0];
+  } 
+  // 3. 일반 watch 주소 체크 (https://youtube.com/watch?v=ID)
+  else if (url.includes("v=")) {
+    videoId = url.split("v=")[1].split("&")[0];
+  } 
+  // 4. 이미 embed 주소인 경우
+  else if (url.includes("embed/")) {
+    return url;
+  }
+
+  return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
+};
+
 type RankLevel = {
   level: number
   description: string
