@@ -12,21 +12,27 @@ const convertToEmbedUrl = (url: string) => {
   if (!url) return "";
   let videoId = "";
   try {
+    // 이미 embed 주소인 경우 그대로 반환
+    if (url.includes("youtube.com/embed/")) return url;
     const parsedUrl = new URL(url);
     if (url.includes("shorts/")) {
+      // 1. Shorts: https://www.youtube.com/shorts/VIDEO_ID
       videoId = parsedUrl.pathname.split("/")[2];
     } else if (url.includes("youtu.be/")) {
+      // 2. 단축 URL: https://youtu.be/VIDEO_ID
       videoId = parsedUrl.pathname.split("/")[1];
     } else if (url.includes("v=")) {
+      // 3. 일반 PC 주소: https://www.youtube.com/watch?v=VIDEO_ID
       videoId = parsedUrl.searchParams.get("v") || "";
-    } else if (url.includes("embed/")) {
-      return url;
     }
+    // ID 뒤에 붙는 ?si= 등의 파라미터 제거
     if (videoId && videoId.includes("?")) {
       videoId = videoId.split("?")[0];
     }
     return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
   } catch (e) {
+    // URL 형식이 아닐 경우 (예: ID만 입력한 경우 등) 최소한의 처리
+    if (url.length === 11) return `https://www.youtube.com/embed/${url}`;
     return url;
   }
 };
