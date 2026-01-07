@@ -1,52 +1,57 @@
 "use client"
+
 import { useState, useEffect, useRef } from "react"
-import { Search, User, ArrowLeft, Plus, Trash2 } from "lucide-react"
+import { Search, User, ArrowLeft, Plus, Trash2, Instagram, Youtube } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import Link from "next/link"
 
-// --- 유튜브 주소 변환 유틸리티 함수 ---
+// --- 유튜브 및 인스타그램 주소 변환 유틸리티 ---
 const convertToEmbedUrl = (url: string) => {
   if (!url) return "";
-  let videoId = "";
   try {
-    // 이미 embed 주소인 경우 그대로 반환
-    if (url.includes("youtube.com/embed/")) return url;
     const parsedUrl = new URL(url);
-    if (url.includes("shorts/")) {
-      // 1. Shorts: https://www.youtube.com/shorts/VIDEO_ID
-      videoId = parsedUrl.pathname.split("/")[2];
-    } else if (url.includes("youtu.be/")) {
-      // 2. 단축 URL: https://youtu.be/VIDEO_ID
-      videoId = parsedUrl.pathname.split("/")[1];
-    } else if (url.includes("v=")) {
-      // 3. 일반 PC 주소: https://www.youtube.com/watch?v=VIDEO_ID
-      videoId = parsedUrl.searchParams.get("v") || "";
+    // 1. 유튜브 처리 (일반, Shorts, 단축 URL 모두 대응)
+    if (url.includes("youtube.com") || url.includes("youtu.be")) {
+      let videoId = "";
+      if (url.includes("shorts/")) {
+        videoId = parsedUrl.pathname.split("/")[2];
+      } else if (url.includes("youtu.be/")) {
+        videoId = parsedUrl.pathname.split("/")[1];
+      } else if (url.includes("v=")) {
+        videoId = parsedUrl.searchParams.get("v") || "";
+      }
+      if (videoId && videoId.includes("?")) {
+        videoId = videoId.split("?")[0];
+      }
+      return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
     }
-    // ID 뒤에 붙는 ?si= 등의 파라미터 제거
-    if (videoId && videoId.includes("?")) {
-      videoId = videoId.split("?")[0];
+    // 2. 인스타그램 처리
+    if (url.includes("instagram.com")) {
+      let baseUrl = url.split("?")[0];
+      if (baseUrl.endsWith("/")) {
+        baseUrl = baseUrl.slice(0, -1);
+      }
+      return `${baseUrl}/embed`;
     }
-    return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
+    return url;
   } catch (e) {
-    // URL 형식이 아닐 경우 (예: ID만 입력한 경우 등) 최소한의 처리
-    if (url.length === 11) return `https://www.youtube.com/embed/${url}`;
     return url;
   }
 };
 
 type RankLevel = {
-  level: number
-  description: string
-  tricks: string[]
+  level: number;
+  description: string;
+  tricks: string[];
 }
 
 type RankCategory = {
-  name: string
-  color: string
-  levels: RankLevel[]
+  name: string;
+  color: string;
+  levels: RankLevel[];
 }
 
 const rampRanks: RankCategory[] = [
@@ -139,11 +144,11 @@ const rampRanks: RankCategory[] = [
       { level: 2, description: "180회전을 활용한 노즈블런트", tricks: ["B/S노즈블런트", "F/S노즈블런트"] },
       { level: 1, description: "180알리를 활용한 노즈", tricks: ["B/S노즈픽", "F/S노즈픽"] },
     ],
-  },
-]
+  }
+];
 
 export default function RampPage() {
-  const [selectedTrick, setSelectedTrick] = useState<{ name: string; videoUrl: string } | null>(null)
+  const [selectedTrick, setSelectedTrick] = useState<{ name: string } | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [trickDescriptions, setTrickDescriptions] = useState<Record<string, string>>({})
   const [currentDescription, setCurrentDescription] = useState("")
@@ -155,12 +160,14 @@ export default function RampPage() {
   const searchRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const saved = localStorage.getItem("skateflow-ramp-descriptions")
-    if (saved) setTrickDescriptions(JSON.parse(saved))
+    const savedDesc = localStorage.getItem("skateflow-ramp-descriptions")
+    if (savedDesc) setTrickDescriptions(JSON.parse(savedDesc))
     const savedVideos = localStorage.getItem("skateflow-ramp-videos")
     if (savedVideos) setTrickVideos(JSON.parse(savedVideos))
-    const handleClickOutside = (event: MouseEvent) => {
-      if (searchRef.current && !searchRef.current.contains(event.target as Node)) setIsSearchFocused(false)
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setIsSearchFocused(false)
+      }
     }
     document.addEventListener("mousedown", handleClickOutside)
     return () => document.removeEventListener("mousedown", handleClickOutside)
@@ -175,15 +182,12 @@ export default function RampPage() {
     }
   }, [selectedTrick, trickDescriptions])
 
-  const searchResults = searchQuery.trim() === "" 
-    ? [] 
-    : rampRanks.flatMap(rank => 
-        rank.levels.flatMap(level => 
-          level.tricks
-            .filter(trick => trick.toLowerCase().includes(searchQuery.toLowerCase()))
-            .map(trick => ({ name: trick, rankName: rank.name, level: level.level }))
-        )
-      )
+  const searchResults = searchQuery.trim() === "" ? [] : rampRanks.flatMap(rank => 
+    rank.levels.flatMap(level => level.tricks
+      .filter(t => t.toLowerCase().includes(searchQuery.toLowerCase()))
+      .map(t => ({ name: t, rankName: rank.name, level: level.level }))
+    )
+  )
 
   const saveDescription = () => {
     if (selectedTrick) {
@@ -196,9 +200,9 @@ export default function RampPage() {
 
   const addVideo = () => {
     if (selectedTrick && newVideoUrl.trim()) {
-      const embeddedUrl = convertToEmbedUrl(newVideoUrl.trim())
-      const currentVideos = trickVideos[selectedTrick.name] || []
-      const updated = { ...trickVideos, [selectedTrick.name]: [...currentVideos, embeddedUrl] }
+      const embedUrl = convertToEmbedUrl(newVideoUrl.trim());
+      const current = trickVideos[selectedTrick.name] || []
+      const updated = { ...trickVideos, [selectedTrick.name]: [...current, embedUrl] }
       setTrickVideos(updated)
       localStorage.setItem("skateflow-ramp-videos", JSON.stringify(updated))
       setNewVideoUrl("")
@@ -206,29 +210,25 @@ export default function RampPage() {
     }
   }
 
-  const deleteVideo = (index: number) => {
+  const deleteVideo = (idx: number) => {
     if (selectedTrick) {
-      const currentVideos = trickVideos[selectedTrick.name] || []
-      const updated = { ...trickVideos, [selectedTrick.name]: currentVideos.filter((_, i) => i !== index) }
+      const current = trickVideos[selectedTrick.name] || []
+      const updated = { ...trickVideos, [selectedTrick.name]: current.filter((_, i) => i !== idx) }
       setTrickVideos(updated)
       localStorage.setItem("skateflow-ramp-videos", JSON.stringify(updated))
     }
   }
 
   const handleTrickClick = (trickName: string) => {
-    setSelectedTrick({ name: trickName, videoUrl: "" })
+    setSelectedTrick({ name: trickName })
     setSearchQuery("")
     setIsSearchFocused(false)
   }
 
-  const getCurrentVideos = () => {
-    if (!selectedTrick) return []
-    return trickVideos[selectedTrick.name] || []
-  }
-
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-card sticky top-0 z-40">
+    <div className="min-h-screen bg-background text-foreground">
+      {/* --- HEADER --- */}
+      <header className="border-b bg-card sticky top-0 z-40">
         <div className="container mx-auto px-4 py-4">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-4">
@@ -240,62 +240,67 @@ export default function RampPage() {
               <Link href="/street"><Button variant="outline" size="sm">스트릿</Button></Link>
               <Link href="/transition"><Button variant="outline" size="sm">트랜지션</Button></Link>
             </div>
-            <div className="flex flex-1 items-center gap-4 md:max-w-md" ref={searchRef}>
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="기술 이름 검색..."
-                  className="pl-9"
-                  value={searchQuery}
-                  onChange={(e) => { setSearchQuery(e.target.value); setIsSearchFocused(true); }}
-                  onFocus={() => setIsSearchFocused(true)}
-                />
-                {isSearchFocused && searchResults.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 z-50 mt-2 max-h-[300px] overflow-y-auto rounded-md border border-border bg-popover shadow-xl">
-                    <div className="p-1">
-                      {searchResults.map((result, idx) => (
-                        <button key={idx} onClick={() => handleTrickClick(result.name)} className="flex w-full flex-col items-start rounded-sm px-3 py-2 text-left hover:bg-accent hover:text-accent-foreground transition-colors">
-                          <span className="text-sm font-semibold">{result.name}</span>
-                          <span className="text-xs text-muted-foreground">{result.rankName} 레벨 {result.level}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+            <div className="relative flex-1 md:max-w-md" ref={searchRef}>
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input 
+                placeholder="기술 검색..." 
+                className="pl-9" 
+                value={searchQuery} 
+                onFocus={() => setIsSearchFocused(true)}
+                onChange={(e) => setSearchQuery(e.target.value)} 
+              />
+              {isSearchFocused && searchResults.length > 0 && (
+                <div className="absolute top-full left-0 right-0 z-50 mt-2 max-h-[300px] overflow-y-auto rounded-md border bg-popover shadow-xl p-1">
+                  {searchResults.map((r, i) => (
+                    <button 
+                      key={i} 
+                      onClick={() => handleTrickClick(r.name)} 
+                      className="flex w-full flex-col p-2 hover:bg-accent rounded-sm text-left"
+                    >
+                      <span className="text-sm font-bold">{r.name}</span>
+                      <span className="text-xs text-muted-foreground">{r.rankName} Lv.{r.level}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <Button variant="ghost" size="icon"><User className="size-5" /></Button>
           </div>
         </div>
       </header>
+
+      {/* --- MAIN CONTENT --- */}
       <main className="container mx-auto px-4 py-8">
-        <div className="mb-8 text-center">
-          <h2 className="mb-2 text-4xl font-bold italic underline decoration-primary/30">KBRT</h2>
-          <p className="text-xl text-muted-foreground font-mono">K&B MINIRAMP RANK TEST</p>
+        <div className="mb-10 text-center">
+          <h2 className="text-5xl font-black italic tracking-tighter text-primary">KBRT</h2>
+          <p className="text-muted-foreground font-mono uppercase">K&B Miniramp Rank Test</p>
         </div>
-        <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {rampRanks.map((rank) => (
-            <div key={rank.name} className="rounded-xl border border-border bg-card p-6 shadow-lg transition-all hover:shadow-primary/5">
-              <div className="mb-6 flex items-center gap-4">
-                <div className={`size-14 rounded-lg bg-gradient-to-br ${rank.color} shadow-lg`} />
-                <h3 className="text-2xl font-black italic">{rank.name}</h3>
+            <div key={rank.name} className="rounded-2xl border bg-card p-5 shadow-sm">
+              <div className="mb-5 flex items-center gap-3">
+                <div className={`size-12 rounded-lg bg-gradient-to-br ${rank.color}`} />
+                <h3 className="text-xl font-bold italic">{rank.name}</h3>
               </div>
-              <div className="space-y-6">
-                {rank.levels.map((level) => (
-                  <div key={level.level} className="space-y-2">
-                    <div className="flex items-baseline gap-2">
-                      <h4 className="whitespace-nowrap text-sm font-bold text-primary">{rank.name} {level.level}</h4>
-                      <span className="text-[11px] text-muted-foreground line-clamp-1">{level.description}</span>
+              <div className="space-y-5">
+                {rank.levels.map((lv) => (
+                  <div key={lv.level} className="space-y-2">
+                    <div className="flex items-center gap-2 border-b pb-1">
+                      <span className="text-xs font-black text-primary">{rank.name} {lv.level}</span>
+                      <span className="text-[10px] text-muted-foreground font-medium">{lv.description}</span>
                     </div>
-                    <ul className="space-y-1.5 pl-3 border-l-2 border-primary/10">
-                      {level.tricks.map((trick, idx) => (
-                        <li key={idx} className="text-sm">
-                          <button onClick={() => handleTrickClick(trick)} className="text-foreground/80 hover:text-primary hover:underline underline-offset-4 transition-all text-left">
-                            {trick}
-                          </button>
-                        </li>
+                    <div className="flex flex-wrap gap-1.5">
+                      {lv.tricks.map((trick, i) => (
+                        <button 
+                          key={i} 
+                          onClick={() => handleTrickClick(trick)}
+                          className="text-xs px-2 py-1 rounded bg-muted hover:bg-primary hover:text-white transition-colors"
+                        >
+                          {trick}
+                        </button>
                       ))}
-                    </ul>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -303,58 +308,98 @@ export default function RampPage() {
           ))}
         </div>
       </main>
+
+      {/* --- TRICK DETAIL DIALOG --- */}
       <Dialog open={!!selectedTrick} onOpenChange={() => setSelectedTrick(null)}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-2xl font-black italic">{selectedTrick?.name}</DialogTitle>
           </DialogHeader>
           <div className="space-y-6">
-            <div className="space-y-4">
-              {getCurrentVideos().length === 0 ? (
-                <div className="aspect-video w-full flex flex-col items-center justify-center rounded-xl bg-muted text-muted-foreground border-2 border-dashed">
-                  <p>등록된 영상이 없습니다.</p>
-                  <p className="text-xs">학습 영상을 추가해보세요!</p>
+            {/* 영상 목록 구역 */}
+            <div className="space-y-6">
+              {(trickVideos[selectedTrick?.name || ""] || []).length === 0 ? (
+                <div className="aspect-video flex items-center justify-center border-2 border-dashed rounded-xl text-muted-foreground text-sm">
+                  유튜브/인스타 영상을 추가하세요.
                 </div>
               ) : (
-                getCurrentVideos().map((videoUrl, index) => (
-                  <div key={index} className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-muted-foreground uppercase">GUIDE VIDEO #{index + 1}</span>
-                      <Button size="sm" variant="ghost" className="text-destructive h-7 px-2 hover:bg-destructive/10" onClick={() => deleteVideo(index)}>
-                        <Trash2 className="size-4 mr-1" /> 삭제
+                trickVideos[selectedTrick?.name || ""].map((url, i) => (
+                  <div key={i} className="space-y-2 pb-4 border-b last:border-0">
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2 text-xs font-bold opacity-50">
+                        {url.includes("instagram") ? <Instagram className="size-3"/> : <Youtube className="size-3"/>}
+                        VIDEO #{i+1}
+                      </div>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-6 text-destructive" 
+                        onClick={() => deleteVideo(i)}
+                      >
+                        <Trash2 className="size-3 mr-1"/>삭제
                       </Button>
                     </div>
-                    <div className="aspect-video w-full overflow-hidden rounded-xl bg-black shadow-2xl">
-                      <iframe src={videoUrl} title={`${selectedTrick?.name} - ${index + 1}`} className="size-full" allowFullScreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" />
+                    {/* 영상 컨테이너: 인스타그램은 세로 비율(4:5), 유튜브는 가로 비율(16:9) 대응 */}
+                    <div 
+                      className="relative w-full overflow-hidden rounded-xl bg-black shadow-lg"
+                      style={{ paddingTop: url.includes("instagram") ? "125%" : "56.25%" }}
+                    >
+                      <iframe 
+                        src={url} 
+                        className="absolute top-0 left-0 w-full h-full" 
+                        allowFullScreen 
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                      />
                     </div>
                   </div>
                 ))
               )}
             </div>
-            <div className="border-t pt-6">
+
+            {/* 영상 추가 폼 */}
+            <div className="pt-4 border-t">
               {isAddingVideo ? (
-                <div className="space-y-3 rounded-lg border border-primary/20 bg-primary/5 p-4">
-                  <label className="text-xs font-bold uppercase">YouTube 주소 입력</label>
-                  <Input placeholder="주소를 복사해서 붙여넣으세요" value={newVideoUrl} onChange={(e) => setNewVideoUrl(e.target.value)} />
+                <div className="flex flex-col gap-2">
+                  <Input 
+                    placeholder="유튜브 또는 인스타그램 주소" 
+                    value={newVideoUrl} 
+                    onChange={(e) => setNewVideoUrl(e.target.value)} 
+                  />
                   <div className="flex gap-2 justify-end">
-                    <Button size="sm" variant="outline" onClick={() => setIsAddingVideo(false)}>취소</Button>
-                    <Button size="sm" onClick={addVideo}>저장하기</Button>
+                    <Button variant="ghost" size="sm" onClick={() => setIsAddingVideo(false)}>취소</Button>
+                    <Button size="sm" onClick={addVideo}>영상 등록</Button>
                   </div>
                 </div>
               ) : (
-                <Button variant="outline" className="w-full border-dashed border-2 hover:border-primary/50 hover:bg-primary/5" onClick={() => setIsAddingVideo(true)}>
-                  <Plus className="mr-2 size-4" /> 새로운 영상 추가
+                <Button 
+                  variant="outline" 
+                  className="w-full border-dashed" 
+                  onClick={() => setIsAddingVideo(true)}
+                >
+                  <Plus className="mr-2 size-4"/>새 영상 추가 (유튜브/인스타)
                 </Button>
               )}
             </div>
-            <div className="space-y-3 border-t pt-6">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold uppercase">나의 연습 노트</label>
-                <Button size="sm" variant={isEditingDescription ? "default" : "ghost"} onClick={() => isEditingDescription ? saveDescription() : setIsEditingDescription(true)}>
+
+            {/* 노하우/팁 메모 구역 */}
+            <div className="space-y-2 border-t pt-4">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-bold">노하우 & 팁</span>
+                <Button 
+                  size="sm" 
+                  variant="ghost" 
+                  onClick={() => isEditingDescription ? saveDescription() : setIsEditingDescription(true)}
+                >
                   {isEditingDescription ? "저장" : "수정"}
                 </Button>
               </div>
-              <Textarea className="min-h-[120px] bg-muted/20 border-none focus-visible:ring-1" value={currentDescription} onChange={(e) => setCurrentDescription(e.target.value)} disabled={!isEditingDescription} placeholder="성공 비결이나 주의할 점을 기록하세요." />
+              <Textarea 
+                value={currentDescription} 
+                onChange={(e) => setCurrentDescription(e.target.value)} 
+                disabled={!isEditingDescription} 
+                className="min-h-[100px] bg-muted/30 border-none resize-none focus-visible:ring-1" 
+                placeholder="기술 성공을 위한 팁을 입력하세요..."
+              />
             </div>
           </div>
         </DialogContent>
