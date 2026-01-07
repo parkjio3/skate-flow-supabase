@@ -1,36 +1,48 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Search, User, ArrowLeft, Plus, Trash2 } from "lucide-react"
+import { Search, User, ArrowLeft, Plus, Trash2, Instagram, Youtube, Edit2, Check, X, PlayCircle, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import Link from "next/link"
 
-// --- 유튜브 주소 변환 유틸리티 함수 ---
-const convertToEmbedUrl = (url: string) => {
+// --- 주소 변환 및 시간 파라미터 처리 유틸리티 ---
+const convertToEmbedUrl = (url: string, startTime?: number) => {
   if (!url) return "";
-  let videoId = "";
-  
-  // 1. shorts 주소 체크 (https://youtube.com/shorts/ID)
-  if (url.includes("shorts/")) {
-    videoId = url.split("shorts/")[1].split("?")[0];
-  } 
-  // 2. youtu.be 주소 체크 (https://youtu.be/ID)
-  else if (url.includes("youtu.be/")) {
-    videoId = url.split("youtu.be/")[1].split("?")[0];
-  } 
-  // 3. 일반 watch 주소 체크 (https://youtube.com/watch?v=ID)
-  else if (url.includes("v=")) {
-    videoId = url.split("v=")[1].split("&")[0];
-  } 
-  // 4. 이미 embed 주소인 경우
-  else if (url.includes("embed/")) {
+  try {
+    // 1. 유튜브 처리
+    if (url.includes("youtube.com") || url.includes("youtu.be")) {
+      let videoId = "";
+      if (url.includes("youtube.com/embed/")) {
+        videoId = url.split("embed/")[1].split("?")[0];
+      } else if (url.includes("shorts/")) {
+        videoId = url.split("shorts/")[1].split("?")[0];
+      } else if (url.includes("youtu.be/")) {
+        videoId = url.split("youtu.be/")[1].split("?")[0];
+      } else {
+        const parsed = new URL(url);
+        videoId = parsed.searchParams.get("v") || "";
+      }
+
+      if (videoId) {
+        const start = startTime !== undefined ? startTime : 0;
+        return `https://www.youtube.com/embed/${videoId}?start=${start}&autoplay=1`;
+      }
+    }
+
+    // 2. 인스타그램 처리 (임베드 주소 생성)
+    if (url.includes("instagram.com")) {
+      let baseUrl = url.split("?")[0];
+      if (baseUrl.endsWith("/")) baseUrl = baseUrl.slice(0, -1);
+      return `${baseUrl}/embed`;
+    }
+
+    return url;
+  } catch (e) {
     return url;
   }
-
-  return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
 };
 
 type Trick = {
@@ -41,7 +53,6 @@ type Trick = {
 }
 
 const streetTricks: Trick[] = [
-  // 기초
   { id: "s1", category: "기초", name: "푸쉬오프\n(5M한발버티기)", videoUrl: "" },
   { id: "s2", category: "기초", name: "틱택\n(10M타임어택)", videoUrl: "" },
   { id: "s3", category: "기초", name: "FS앤드워크\n(10M타임어택)", videoUrl: "" },
@@ -63,8 +74,6 @@ const streetTricks: Trick[] = [
   { id: "s19", category: "기초", name: "페이키 FS앤드오버", videoUrl: "" },
   { id: "s20", category: "기초", name: "페이키 BS앤드오버", videoUrl: "" },
   { id: "s21", category: "기초", name: "히피점프", videoUrl: "" },
-
-  // 알리
   { id: "a1", category: "알리", name: "주행 알리", videoUrl: "" },
   { id: "a2", category: "알리", name: "알리 높이\n(10CM)", videoUrl: "" },
   { id: "a3", category: "알리", name: "알리 높이\n(20CM)", videoUrl: "" },
@@ -79,8 +88,6 @@ const streetTricks: Trick[] = [
   { id: "a12", category: "알리", name: "알리 멀리\n(100CM)", videoUrl: "" },
   { id: "a13", category: "알리", name: "알리 멀리\n(160CM)", videoUrl: "" },
   { id: "a14", category: "알리", name: "알리 멀리\n(200CM)", videoUrl: "" },
-
-  // 샤빗
   { id: "sh1", category: "샤빗", name: "BS샤빗", videoUrl: "" },
   { id: "sh2", category: "샤빗", name: "BS360샤빗", videoUrl: "" },
   { id: "sh3", category: "샤빗", name: "페이키BS샤빗", videoUrl: "" },
@@ -91,8 +98,6 @@ const streetTricks: Trick[] = [
   { id: "sh8", category: "샤빗", name: "페이키FS샤빗", videoUrl: "" },
   { id: "sh9", category: "샤빗", name: "페이키FS빅스핀", videoUrl: "" },
   { id: "sh10", category: "샤빗", name: "FS빅스핀", videoUrl: "" },
-
-  // 회전
   { id: "r1", category: "회전", name: "BS180알리", videoUrl: "" },
   { id: "r2", category: "회전", name: "BS360알리", videoUrl: "" },
   { id: "r3", category: "회전", name: "BS하프캡", videoUrl: "" },
@@ -101,8 +106,6 @@ const streetTricks: Trick[] = [
   { id: "r6", category: "회전", name: "FS360알리", videoUrl: "" },
   { id: "r7", category: "회전", name: "FS하프캡", videoUrl: "" },
   { id: "r8", category: "회전", name: "FS풀캡", videoUrl: "" },
-
-  // 슬라이드
   { id: "sl1", category: "슬라이드", name: "BS보드슬라이드", videoUrl: "" },
   { id: "sl2", category: "슬라이드", name: "FS보드슬라이드", videoUrl: "" },
   { id: "sl3", category: "슬라이드", name: "BS립슬라이드", videoUrl: "" },
@@ -115,8 +118,6 @@ const streetTricks: Trick[] = [
   { id: "sl10", category: "슬라이드", name: "FS블런트슬라이드", videoUrl: "" },
   { id: "sl11", category: "슬라이드", name: "BS노즈블런트슬라이드", videoUrl: "" },
   { id: "sl12", category: "슬라이드", name: "FS노즈블런트슬라이드", videoUrl: "" },
-
-  // 그라인드
   { id: "g1", category: "그라인드", name: "BS50-50 그라인드", videoUrl: "" },
   { id: "g2", category: "그라인드", name: "FS50-50 그라인드", videoUrl: "" },
   { id: "g3", category: "그라인드", name: "BS5-0 그라인드", videoUrl: "" },
@@ -129,8 +130,6 @@ const streetTricks: Trick[] = [
   { id: "g10", category: "그라인드", name: "BS크룩 그라인드", videoUrl: "" },
   { id: "g11", category: "그라인드", name: "FS노즈 그라인드", videoUrl: "" },
   { id: "g12", category: "그라인드", name: "FS크룩 그라인드", videoUrl: "" },
-
-  // 킥플립
   { id: "kf1", category: "킥플립", name: "킥플립", videoUrl: "" },
   { id: "kf2", category: "킥플립", name: "베리얼킥플립", videoUrl: "" },
   { id: "kf3", category: "킥플립", name: "트레플립", videoUrl: "" },
@@ -145,8 +144,6 @@ const streetTricks: Trick[] = [
   { id: "kf12", category: "킥플립", name: "풀캡 킥플립", videoUrl: "" },
   { id: "kf13", category: "킥플립", name: "페이키 BS빅스핀 킥플립", videoUrl: "" },
   { id: "kf14", category: "킥플립", name: "하드플립", videoUrl: "" },
-
-  // 힐플립
   { id: "hf1", category: "힐플립", name: "힐플립", videoUrl: "" },
   { id: "hf2", category: "힐플립", name: "베리얼힐플립", videoUrl: "" },
   { id: "hf3", category: "힐플립", name: "레이져플립", videoUrl: "" },
@@ -161,8 +158,6 @@ const streetTricks: Trick[] = [
   { id: "hf12", category: "힐플립", name: "풀캡 힐플립", videoUrl: "" },
   { id: "hf13", category: "힐플립", name: "페이키 FS빅스핀 힐플립", videoUrl: "" },
   { id: "hf14", category: "힐플립", name: "인워드힐플립", videoUrl: "" },
-
-  // 널리
   { id: "n1", category: "널리", name: "널리", videoUrl: "" },
   { id: "n2", category: "널리", name: "널리 BS180", videoUrl: "" },
   { id: "n3", category: "널리", name: "널리 BS360", videoUrl: "" },
@@ -184,8 +179,6 @@ const streetTricks: Trick[] = [
   { id: "n19", category: "널리", name: "널리 BS360힐플립", videoUrl: "" },
   { id: "n20", category: "널리", name: "널리 FS180힐플립", videoUrl: "" },
   { id: "n21", category: "널리", name: "널리 FS360힐플립", videoUrl: "" },
-
-  // 스위치
   { id: "sw1", category: "스위치", name: "스위치 알리", videoUrl: "" },
   { id: "sw2", category: "스위치", name: "스위치 BS180", videoUrl: "" },
   { id: "sw3", category: "스위치", name: "스위치 BS360", videoUrl: "" },
@@ -221,6 +214,8 @@ export default function StreetPage() {
   const [trickVideos, setTrickVideos] = useState<Record<string, string[]>>({})
   const [newVideoUrl, setNewVideoUrl] = useState("")
   const [isAddingVideo, setIsAddingVideo] = useState(false)
+  const [editingVideoIdx, setEditingVideoIdx] = useState<number | null>(null)
+  const [editingVideoUrl, setEditingVideoUrl] = useState("")
   const searchRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -242,8 +237,66 @@ export default function StreetPage() {
       setIsEditingDescription(false)
       setNewVideoUrl("")
       setIsAddingVideo(false)
+      setEditingVideoIdx(null)
     }
   }, [selectedTrick, trickDescriptions])
+
+  // --- 시간 이동 로직 ---
+  const jumpToVideoTime = (videoNum: number, timeStr: string) => {
+    const [min, sec] = timeStr.replace(/[()]/g, "").split(":").map(Number);
+    const totalSeconds = min * 60 + sec;
+    const videoIndex = videoNum - 1;
+    
+    if (selectedTrick) {
+      const videos = trickVideos[selectedTrick.name] || [];
+      const targetUrl = videos[videoIndex];
+      
+      if (targetUrl) {
+        if (targetUrl.includes("instagram.com")) {
+          // 인스타그램: 새 창에서 시간 파라미터 적용
+          let cleanUrl = targetUrl.replace("/embed", "").split("?")[0];
+          if (cleanUrl.endsWith("/")) cleanUrl = cleanUrl.slice(0, -1);
+          window.open(`${cleanUrl}/?t=${totalSeconds}s`, "_blank");
+        } else {
+          // 유튜브: iframe 내부 주소 업데이트
+          const updatedVideos = [...videos];
+          updatedVideos[videoIndex] = convertToEmbedUrl(targetUrl, totalSeconds);
+          setTrickVideos({ ...trickVideos, [selectedTrick.name]: updatedVideos });
+        }
+      }
+    }
+  };
+
+  // --- 팁 텍스트 렌더링 (클릭 가능한 링크 생성) ---
+  const renderDescriptionWithLinks = (text: string) => {
+    const combinedPattern = /영상(\d+)\((\d{1,2}:\d{2})\)/g;
+    const parts = text.split(combinedPattern);
+    const elements = [];
+
+    for (let i = 0; i < parts.length; i += 3) {
+      elements.push(<span key={`text-${i}`}>{parts[i]}</span>);
+      if (parts[i + 1] && parts[i + 2]) {
+        const videoNum = parseInt(parts[i + 1]);
+        const timeStr = parts[i + 2];
+        const videoUrl = trickVideos[selectedTrick?.name || ""]?.[videoNum - 1] || "";
+        const isInstagram = videoUrl.includes("instagram");
+
+        elements.push(
+          <button
+            key={`btn-${i}`}
+            onClick={() => jumpToVideoTime(videoNum, timeStr)}
+            className={`font-bold hover:underline inline-flex items-center gap-0.5 mx-0.5 px-1 rounded transition-colors ${
+              isInstagram ? "text-pink-600 bg-pink-50" : "text-primary bg-primary/5"
+            }`}
+          >
+            {isInstagram ? <ExternalLink className="size-3" /> : <PlayCircle className="size-3" />}
+            영상{videoNum}({timeStr})
+          </button>
+        );
+      }
+    }
+    return <div className="whitespace-pre-wrap leading-relaxed">{elements}</div>;
+  };
 
   const searchResults = searchQuery.trim() === "" 
     ? [] 
@@ -276,6 +329,23 @@ export default function StreetPage() {
       localStorage.setItem("skateflow-street-videos", JSON.stringify(updated))
       setNewVideoUrl("")
       setIsAddingVideo(false)
+    }
+  }
+
+  const startEditVideo = (idx: number, url: string) => {
+    setEditingVideoIdx(idx)
+    setEditingVideoUrl(url)
+  }
+
+  const saveEditVideo = (idx: number) => {
+    if (selectedTrick && editingVideoUrl.trim()) {
+      const embedUrl = convertToEmbedUrl(editingVideoUrl.trim());
+      const current = [...(trickVideos[selectedTrick.name] || [])]
+      current[idx] = embedUrl
+      const updated = { ...trickVideos, [selectedTrick.name]: current }
+      setTrickVideos(updated)
+      localStorage.setItem("skateflow-street-videos", JSON.stringify(updated))
+      setEditingVideoIdx(null)
     }
   }
 
@@ -334,9 +404,9 @@ export default function StreetPage() {
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        <div className="mb-10">
-          <h2 className="font-mono text-4xl font-extrabold tracking-tighter italic">STREET TRICKS</h2>
-          <p className="text-muted-foreground">스트릿 기술 라이브러리</p>
+        <div className="mb-10 text-center">
+          <h2 className="font-mono text-5xl font-black tracking-tighter italic text-primary">STREET TRICKS</h2>
+          <p className="text-muted-foreground font-mono">SKATEBOARD STREET SKILL LIBRARY</p>
         </div>
 
         <div className="grid gap-8 lg:grid-cols-2">
@@ -365,63 +435,68 @@ export default function StreetPage() {
       </main>
 
       <Dialog open={!!selectedTrick} onOpenChange={() => setSelectedTrick(null)}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <div className="text-xs font-bold text-primary uppercase tracking-widest">{selectedTrick?.category}</div>
             <DialogTitle className="text-2xl font-black italic">{selectedTrick?.name.replace('\n', ' ')}</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-6">
-            <div className="space-y-4">
-              {[selectedTrick?.videoUrl, ...(trickVideos[selectedTrick?.name || ""] || [])].map((url, i) => (
-                url && (
-                  <div key={i} className="group relative">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-bold opacity-50">VIDEO #{i + 1}</span>
-                      {i > 0 && (
-                        <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => deleteVideo(i - 1)}>
-                          <Trash2 className="size-4" />
-                        </Button>
-                      )}
+            <div className="space-y-8">
+              {(trickVideos[selectedTrick?.name || ""] || []).length === 0 ? (
+                <div className="aspect-video flex items-center justify-center border-2 border-dashed rounded-xl text-muted-foreground text-sm">등록된 영상이 없습니다.</div>
+              ) : (
+                trickVideos[selectedTrick?.name || ""].map((url, i) => (
+                  <div key={i} className="space-y-3 pb-6 border-b last:border-0">
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2 text-xs font-bold opacity-50">
+                        {url.includes("instagram") ? <Instagram className="size-3"/> : <Youtube className="size-3"/>}
+                        VIDEO #{i+1}
+                      </div>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => startEditVideo(i, url)}><Edit2 className="size-3 mr-1"/>수정</Button>
+                        <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive" onClick={() => deleteVideo(i)}><Trash2 className="size-3 mr-1"/>삭제</Button>
+                      </div>
                     </div>
-                    <div className="aspect-video w-full overflow-hidden rounded-xl bg-muted border shadow-inner">
-                      <iframe src={url} className="size-full" allowFullScreen />
-                    </div>
+                    {editingVideoIdx === i ? (
+                      <div className="flex gap-2 bg-muted p-3 rounded-lg">
+                        <Input className="h-9 text-sm" value={editingVideoUrl} onChange={(e) => setEditingVideoUrl(e.target.value)}/>
+                        <Button size="sm" className="h-9 px-2" onClick={() => saveEditVideo(i)}><Check className="size-4"/></Button>
+                        <Button size="sm" variant="ghost" className="h-9 px-2" onClick={() => setEditingVideoIdx(null)}><X className="size-4"/></Button>
+                      </div>
+                    ) : (
+                      <div className="relative w-full overflow-hidden rounded-xl bg-black shadow-lg" style={{ paddingTop: url.includes("instagram") ? "125%" : "56.25%" }}>
+                        <iframe src={url} className="absolute top-0 left-0 w-full h-full" allowFullScreen />
+                      </div>
+                    )}
                   </div>
-                )
-              ))}
+                ))
+              )}
             </div>
 
             <div className="pt-4 border-t">
               {isAddingVideo ? (
-                <div className="space-y-2 rounded-xl bg-muted p-4">
-                  <Input placeholder="유튜브 URL을 붙여넣으세요 (Shorts 지원)" value={newVideoUrl} onChange={(e) => setNewVideoUrl(e.target.value)} />
-                  <div className="flex gap-2 justify-end">
-                    <Button size="sm" variant="ghost" onClick={() => setIsAddingVideo(false)}>취소</Button>
-                    <Button size="sm" onClick={addVideo}>저장</Button>
-                  </div>
+                <div className="flex flex-col gap-2">
+                  <Input placeholder="유튜브 또는 인스타그램 주소" value={newVideoUrl} onChange={(e) => setNewVideoUrl(e.target.value)} />
+                  <div className="flex gap-2 justify-end"><Button variant="ghost" size="sm" onClick={() => setIsAddingVideo(false)}>취소</Button><Button size="sm" onClick={addVideo}>영상 등록</Button></div>
                 </div>
               ) : (
-                <Button variant="ghost" className="w-full border-dashed border-2" onClick={() => setIsAddingVideo(true)}>
-                  <Plus className="mr-2 size-4" /> 추가 학습 영상 등록
-                </Button>
+                <Button variant="outline" className="w-full border-dashed" onClick={() => setIsAddingVideo(true)}><Plus className="mr-2 size-4"/>학습 영상 추가</Button>
               )}
             </div>
 
-            <div className="space-y-2 border-t pt-6">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-bold italic">TIPS & NOTES</span>
-                <Button size="sm" variant={isEditingDescription ? "default" : "ghost"} onClick={() => isEditingDescription ? saveDescription() : setIsEditingDescription(true)}>
-                  {isEditingDescription ? "저장" : "수정"}
-                </Button>
+            <div className="space-y-2 border-t pt-4">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-bold italic tracking-widest">TIPS & NOTES</span>
+                <Button size="sm" variant="ghost" onClick={() => isEditingDescription ? saveDescription() : setIsEditingDescription(true)}>{isEditingDescription ? "저장" : "수정"}</Button>
               </div>
-              <Textarea
-                className="min-h-[100px] bg-muted/50 border-none"
-                placeholder="성공을 위한 팁이나 본인만의 노하우를 적어주세요."
-                value={currentDescription}
-                onChange={(e) => setCurrentDescription(e.target.value)}
-                disabled={!isEditingDescription}
-              />
+              {isEditingDescription ? (
+                <Textarea value={currentDescription} onChange={(e) => setCurrentDescription(e.target.value)} className="min-h-[120px] bg-muted/30 border-none resize-none" placeholder="영상1(00:20) 처럼 작성하세요." />
+              ) : (
+                <div className="p-3 rounded-md bg-muted/30 text-sm min-h-[60px]">
+                  {currentDescription ? renderDescriptionWithLinks(currentDescription) : <span className="text-muted-foreground italic">입력된 팁이 없습니다.</span>}
+                </div>
+              )}
             </div>
           </div>
         </DialogContent>
