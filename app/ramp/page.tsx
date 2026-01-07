@@ -1,23 +1,19 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Search, User, ArrowLeft, Plus, Trash2, Instagram, Youtube, Edit2, Check, X, PlayCircle } from "lucide-react"
+import { Search, User, ArrowLeft, Plus, Trash2, Instagram, Youtube, Edit2, Check, X, PlayCircle, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import Link from "next/link"
 
-// --- 유튜브 및 인스타그램 주소 변환 유틸리티 ---
+// --- 주소 변환 및 시간 파라미터 처리 유틸리티 ---
 const convertToEmbedUrl = (url: string, startTime?: number) => {
   if (!url) return "";
   try {
-    // 이미 embed 된 URL에서 기본 주소만 추출하기 위함
-    const rawUrl = url.split('?')[0];
-    
     if (url.includes("youtube.com") || url.includes("youtu.be") || url.includes("youtube.com/embed/")) {
       let videoId = "";
-      
       if (url.includes("youtube.com/embed/")) {
         videoId = url.split("embed/")[1].split("?")[0];
       } else if (url.includes("shorts/")) {
@@ -30,8 +26,8 @@ const convertToEmbedUrl = (url: string, startTime?: number) => {
       }
 
       if (videoId) {
-        // 타임스탬프가 있으면 추가, 없으면 기존 파라미터 유지 시도
         const start = startTime !== undefined ? startTime : 0;
+        // 유튜브는 iframe 내에서 start 파라미터로 시간 이동 가능
         return `https://www.youtube.com/embed/${videoId}?start=${start}&autoplay=1`;
       }
     }
@@ -39,6 +35,7 @@ const convertToEmbedUrl = (url: string, startTime?: number) => {
     if (url.includes("instagram.com")) {
       let baseUrl = url.split("?")[0];
       if (baseUrl.endsWith("/")) baseUrl = baseUrl.slice(0, -1);
+      // 인스타그램 임베드는 시간 이동을 지원하지 않으므로 기본 임베드 주소만 반환
       return `${baseUrl}/embed`;
     }
 
@@ -100,59 +97,60 @@ export default function RampPage() {
     }
   }, [selectedTrick, trickDescriptions])
 
-  // 영상 번호와 시간을 인식하여 점프
   const jumpToVideoTime = (videoNum: number, timeStr: string) => {
     const [min, sec] = timeStr.replace(/[()]/g, "").split(":").map(Number);
     const totalSeconds = min * 60 + sec;
-    const videoIndex = videoNum - 1; // 사용자는 1번부터 입력하므로 인덱스는 -1
+    const videoIndex = videoNum - 1;
     
     if (selectedTrick) {
       const videos = trickVideos[selectedTrick.name] || [];
-      if (videos[videoIndex]) {
-        const updatedVideos = [...videos];
-        // 선택된 순서의 영상만 타임스탬프 적용하여 교체
-        updatedVideos[videoIndex] = convertToEmbedUrl(videos[videoIndex], totalSeconds);
-        setTrickVideos({ ...trickVideos, [selectedTrick.name]: updatedVideos });
-        // LocalStorage 저장 (필요 시)
-        localStorage.setItem("skateflow-ramp-videos", JSON.stringify({ ...trickVideos, [selectedTrick.name]: updatedVideos }));
+      const targetUrl = videos[videoIndex];
+      
+      if (targetUrl) {
+        // 인스타그램인 경우: 새 탭에서 시간 파라미터가 적용된 페이지 열기
+        if (targetUrl.includes("instagram.com")) {
+          const originalUrl = targetUrl.replace("/embed", "");
+          const timeUrl = `${originalUrl}${originalUrl.includes("?") ? "&" : "?"}t=${totalSeconds}s`;
+          window.open(timeUrl, "_blank");
+        } 
+        // 유튜브인 경우: iframe 주소를 업데이트하여 내부에서 시간 점프
+        else {
+          const updatedVideos = [...videos];
+          updatedVideos[videoIndex] = convertToEmbedUrl(targetUrl, totalSeconds);
+          setTrickVideos({ ...trickVideos, [selectedTrick.name]: updatedVideos });
+        }
       }
     }
   };
 
-  // "영상1(00:00)" 패턴 인식
   const renderDescriptionWithLinks = (text: string) => {
     const combinedPattern = /영상(\d+)\((\d{1,2}:\d{2})\)/g;
     const parts = text.split(combinedPattern);
-    
-    // split에 그룹이 포함되면 [일반텍스트, 숫자, 시간, 일반텍스트...] 순서로 배열이 생성됨
     const elements = [];
+
     for (let i = 0; i < parts.length; i += 3) {
       elements.push(<span key={`text-${i}`}>{parts[i]}</span>);
       if (parts[i + 1] && parts[i + 2]) {
         const videoNum = parseInt(parts[i + 1]);
         const timeStr = parts[i + 2];
+        const isInstagram = (trickVideos[selectedTrick?.name || ""]?.[videoNum - 1] || "").includes("instagram");
+
         elements.push(
           <button
             key={`btn-${i}`}
             onClick={() => jumpToVideoTime(videoNum, timeStr)}
-            className="text-primary font-bold hover:underline inline-flex items-center gap-0.5 mx-0.5 bg-primary/5 px-1 rounded"
+            className={`font-bold hover:underline inline-flex items-center gap-0.5 mx-0.5 px-1 rounded transition-colors ${
+              isInstagram ? "text-pink-600 bg-pink-50" : "text-primary bg-primary/5"
+            }`}
           >
-            <PlayCircle className="size-3" />
+            {isInstagram ? <ExternalLink className="size-3" /> : <PlayCircle className="size-3" />}
             영상{videoNum}({timeStr})
           </button>
         );
       }
     }
-
     return <div className="whitespace-pre-wrap leading-relaxed">{elements}</div>;
   };
-
-  const searchResults = searchQuery.trim() === "" ? [] : rampRanks.flatMap(rank => 
-    rank.levels.flatMap(level => level.tricks
-      .filter(t => t.toLowerCase().includes(searchQuery.toLowerCase()))
-      .map(t => ({ name: t, rankName: rank.name, level: level.level }))
-    )
-  )
 
   const saveDescription = () => {
     if (selectedTrick) {
@@ -309,10 +307,7 @@ export default function RampPage() {
                 <Button size="sm" variant="ghost" onClick={() => isEditingDescription ? saveDescription() : setIsEditingDescription(true)}>{isEditingDescription ? "저장" : "수정"}</Button>
               </div>
               {isEditingDescription ? (
-                <div className="space-y-2">
-                  <Textarea value={currentDescription} onChange={(e) => setCurrentDescription(e.target.value)} className="min-h-[120px] bg-muted/30 border-none resize-none" placeholder="입력 예: 영상1(00:20) 이 부분 자세 참고, 영상2(01:05) 착지 지점 확인" />
-                  <p className="text-[10px] text-muted-foreground italic">※ '영상번호(분:초)' 형식으로 입력하면 해당 영상의 시간이 링크됩니다.</p>
-                </div>
+                <Textarea value={currentDescription} onChange={(e) => setCurrentDescription(e.target.value)} className="min-h-[120px] bg-muted/30 border-none resize-none" placeholder="영상1(00:20) 처럼 작성하세요." />
               ) : (
                 <div className="p-3 rounded-md bg-muted/30 text-sm min-h-[60px]">
                   {currentDescription ? renderDescriptionWithLinks(currentDescription) : <span className="text-muted-foreground italic">팁이 없습니다.</span>}
