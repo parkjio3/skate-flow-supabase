@@ -1,60 +1,44 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Search, User, ArrowLeft, Plus, Trash2, Instagram, Youtube, Edit2, Check, X } from "lucide-react"
+import { Search, User, ArrowLeft, Plus, Trash2, Instagram, Youtube, Edit2, Check, X, PlayCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import Link from "next/link"
 
-// --- 유튜브 및 인스타그램 주소 변환 유틸리티 (시간 링크 기능 포함) ---
-const convertToEmbedUrl = (url: string) => {
+// --- 유튜브 및 인스타그램 주소 변환 유틸리티 ---
+const convertToEmbedUrl = (url: string, startTime?: number) => {
   if (!url) return "";
   try {
-    const parsedUrl = new URL(url);
+    // 이미 embed 된 URL에서 기본 주소만 추출하기 위함
+    const rawUrl = url.split('?')[0];
     
-    // 1. 유튜브 처리
-    if (url.includes("youtube.com") || url.includes("youtu.be")) {
+    if (url.includes("youtube.com") || url.includes("youtu.be") || url.includes("youtube.com/embed/")) {
       let videoId = "";
-      let startTime = "";
-
-      // 시간 파라미터 추출 (t=80s, t=80 등)
-      const t = parsedUrl.searchParams.get("t") || parsedUrl.searchParams.get("start");
-      if (t) {
-        // 's'가 붙어있으면 제거하고 숫자만 추출
-        startTime = t.replace("s", "");
-      }
-
-      if (url.includes("shorts/")) {
-        videoId = parsedUrl.pathname.split("/")[2];
+      
+      if (url.includes("youtube.com/embed/")) {
+        videoId = url.split("embed/")[1].split("?")[0];
+      } else if (url.includes("shorts/")) {
+        videoId = url.split("shorts/")[1].split("?")[0];
       } else if (url.includes("youtu.be/")) {
-        videoId = parsedUrl.pathname.split("/")[1];
-      } else if (url.includes("v=")) {
-        videoId = parsedUrl.searchParams.get("v") || "";
-      }
-
-      if (videoId && videoId.includes("?")) {
-        videoId = videoId.split("?")[0];
+        videoId = url.split("youtu.be/")[1].split("?")[0];
+      } else {
+        const parsed = new URL(url);
+        videoId = parsed.searchParams.get("v") || "";
       }
 
       if (videoId) {
-        let embedUrl = `https://www.youtube.com/embed/${videoId}`;
-        // 시간 파라미터가 있다면 ?start=초 형식으로 추가
-        if (startTime) {
-          embedUrl += `?start=${startTime}`;
-        }
-        return embedUrl;
+        // 타임스탬프가 있으면 추가, 없으면 기존 파라미터 유지 시도
+        const start = startTime !== undefined ? startTime : 0;
+        return `https://www.youtube.com/embed/${videoId}?start=${start}&autoplay=1`;
       }
-      return url;
     }
 
-    // 2. 인스타그램 처리
     if (url.includes("instagram.com")) {
       let baseUrl = url.split("?")[0];
-      if (baseUrl.endsWith("/")) {
-        baseUrl = baseUrl.slice(0, -1);
-      }
+      if (baseUrl.endsWith("/")) baseUrl = baseUrl.slice(0, -1);
       return `${baseUrl}/embed`;
     }
 
@@ -64,109 +48,20 @@ const convertToEmbedUrl = (url: string) => {
   }
 };
 
-type RankLevel = {
-  level: number;
-  description: string;
-  tricks: string[];
-}
-
-type RankCategory = {
-  name: string;
-  color: string;
-  levels: RankLevel[];
-}
+type RankLevel = { level: number; description: string; tricks: string[] }
+type RankCategory = { name: string; color: string; levels: RankLevel[] }
 
 const rampRanks: RankCategory[] = [
-  {
-    name: "아이언",
-    color: "from-stone-600 to-stone-800",
-    levels: [
-      { level: 3, description: "진자운동 하프파이프", tricks: ["락인", "락투페이키", "스위치 락투페이키"] },
-      { level: 2, description: "테일탭 활용한", tricks: ["드롭인", "테일스톨"] },
-      { level: 1, description: "킥턴 활용한 락", tricks: ["B/S하프캡 락투페이키", "B/S락앤롤", "B/S하프캡 락앤롤"] },
-    ],
-  },
-  {
-    name: "브론즈",
-    color: "from-amber-600 to-amber-800",
-    levels: [
-      { level: 3, description: "틱택을 활용한 스톨 (뒷꿈치중심)", tricks: ["페이키 F/S엑슬스톨", "페이키 F/S스미스스톨"] },
-      { level: 2, description: "틱택을 활용한 스톨 (뒷꿈치중심)", tricks: ["B/S피블스톨", "B/S엑슬스톨"] },
-      { level: 1, description: "틱택을 활용한 스톨 (앞꿈치중심)", tricks: ["페이키 B/S엑슬스톨", "페이키 B/S스미스스톨"] },
-    ],
-  },
-  {
-    name: "실버",
-    color: "from-gray-400 to-gray-600",
-    levels: [
-      { level: 3, description: "킥턴을 활용한 락", tricks: ["F/S하프캡 락투페이키", "F/S락앤롤"] },
-      { level: 2, description: "앤드워크를 활용한 스위치 락", tricks: ["스위치 F/S락", "스위치 B/S락앤롤"] },
-      { level: 1, description: "앤드워크를 활용한 페이키아웃", tricks: ["B/S엑슬스톨 페이키", "페이키 B/S엑슬스톨 페이키"] },
-    ],
-  },
-  {
-    name: "골드",
-    color: "from-yellow-500 to-yellow-700",
-    levels: [
-      { level: 3, description: "틱택과 테일탭을 활용한 스톨", tricks: ["페이키 F/S파이브오", "페이키 B/S파이브오"] },
-      { level: 2, description: "틱택을 활용한 스톨 (뒷꿈치중심)", tricks: ["F/S엑슬스톨", "F/S스미스스톨"] },
-      { level: 1, description: "앤드워크를 활용한 페이키아웃", tricks: ["페이키 F/S엑슬스톨 페이키", "F/S엑슬스톨 페이키", "페이키 F/S스미스스톨 페이키"] },
-    ],
-  },
-  {
-    name: "플래티넘",
-    color: "from-slate-400 to-slate-600",
-    levels: [
-      { level: 3, description: "노즈탭과 앤드워크를 활용한", tricks: ["노즈스톨", "스위치B/S락", "스위치F/S락앤롤"] },
-      { level: 2, description: "앤드워크를 활용한 리버트", tricks: ["테일스톨 B/S리버트", "테일스톨 F/S리버트"] },
-      { level: 1, description: "틱택과 테일탭을 활용한 스톨", tricks: ["B/S파이브오", "F/S파이브오"] },
-    ],
-  },
-  {
-    name: "에메랄드",
-    color: "from-emerald-500 to-emerald-700",
-    levels: [
-      { level: 3, description: "틱택을 활용한 스톨 (앞꿈치중심)", tricks: ["F/S피블스톨", "B/S스미스스톨"] },
-      { level: 2, description: "킥턴과 180알리를 활용한 락", tricks: ["행업", "B/S디제스터", "F/S디제스터"] },
-      { level: 1, description: "테일탭과 알리를 활용한", tricks: ["블런트 락투페이키", "블런트 노즈그랩 페이키"] },
-    ],
-  },
-  {
-    name: "다이아몬드",
-    color: "from-sky-400 to-sky-600",
-    levels: [
-      { level: 3, description: "틱택을 활용한 페이키아웃", tricks: ["B/S피블스톨 페이키", "B/S파이브오 페이키"] },
-      { level: 2, description: "앤드워크를 활용한 페이키아웃", tricks: ["F/S스미스스톨 페이키", "F/S파이브오 페이키"] },
-      { level: 1, description: "테일탭과 알리를 활용한", tricks: ["블런트 페이키", "널리 디제스터"] },
-    ],
-  },
-  {
-    name: "마스터",
-    color: "from-purple-500 to-purple-700",
-    levels: [
-      { level: 3, description: "락앤롤을 활용한 스톨", tricks: ["B/S허리케인", "F/S허리케인"] },
-      { level: 2, description: "노즈탭과 널리를 활용한", tricks: ["스위치블런트 락투페이키", "스위치블런트"] },
-      { level: 1, description: "킥턴과 180알리를 활용한 스톨", tricks: ["F/S테일스톨 (or린테일)", "B/S테일스톨 (or바디자)"] },
-    ],
-  },
-  {
-    name: "그랜드마스터",
-    color: "from-red-600 to-red-800",
-    levels: [
-      { level: 3, description: "노즈탭을 활용한 스톨", tricks: ["B/S크룩스톨", "F/S노즈스톨", "F/S파이브오투페이키"] },
-      { level: 2, description: "180회전을 활용한 블런트", tricks: ["B/S하프캡 블런트", "블런트B/S아웃", "블런트F/S아웃"] },
-      { level: 1, description: "디제스터를 활용한 스톨", tricks: ["B/S슈가케인", "F/S슈가케인"] },
-    ],
-  },
-  {
-    name: "챌린저",
-    color: "from-cyan-400 to-cyan-600",
-    levels: [
-      { level: 3, description: "스위치 블런트 활용", tricks: ["스위치 블런트EB/S아웃", "스위치 블런트EF/S아웃"] },
-      { level: 2, description: "180회전을 활용한 노즈블런트", tricks: ["B/S노즈블런트", "F/S노즈블런트"] },
-      { level: 1, description: "180알리를 활용한 노즈", tricks: ["B/S노즈픽", "F/S노즈픽"] },
-    ],
-  }
+  { name: "아이언", color: "from-stone-600 to-stone-800", levels: [{ level: 3, description: "진자운동 하프파이프", tricks: ["락인", "락투페이키", "스위치 락투페이키"] }, { level: 2, description: "테일탭 활용한", tricks: ["드롭인", "테일스톨"] }, { level: 1, description: "킥턴 활용한 락", tricks: ["B/S하프캡 락투페이키", "B/S락앤롤", "B/S하프캡 락앤롤"] }] },
+  { name: "브론즈", color: "from-amber-600 to-amber-800", levels: [{ level: 3, description: "틱택을 활용한 스톨 (뒷꿈치중심)", tricks: ["페이키 F/S엑슬스톨", "페이키 F/S스미스스톨"] }, { level: 2, description: "틱택을 활용한 스톨 (뒷꿈치중심)", tricks: ["B/S피블스톨", "B/S엑슬스톨"] }, { level: 1, description: "틱택을 활용한 스톨 (앞꿈치중심)", tricks: ["페이키 B/S엑슬스톨", "페이키 B/S스미스스톨"] }] },
+  { name: "실버", color: "from-gray-400 to-gray-600", levels: [{ level: 3, description: "킥턴을 활용한 락", tricks: ["F/S하프캡 락투페이키", "F/S락앤롤"] }, { level: 2, description: "앤드워크를 활용한 스위치 락", tricks: ["스위치 F/S락", "스위치 B/S락앤롤"] }, { level: 1, description: "앤드워크를 활용한 페이키아웃", tricks: ["B/S엑슬스톨 페이키", "페이키 B/S엑슬스톨 페이키"] }] },
+  { name: "골드", color: "from-yellow-500 to-yellow-700", levels: [{ level: 3, description: "틱택과 테일탭을 활용한 스톨", tricks: ["페이키 F/S파이브오", "페이키 B/S파이브오"] }, { level: 2, description: "틱택을 활용한 스톨 (뒷꿈치중심)", tricks: ["F/S엑슬스톨", "F/S스미스스톨"] }, { level: 1, description: "앤드워크를 활용한 페이키아웃", tricks: ["페이키 F/S엑슬스톨 페이키", "F/S엑슬스톨 페이키", "페이키 F/S스미스스톨 페이키"] }] },
+  { name: "플래티넘", color: "from-slate-400 to-slate-600", levels: [{ level: 3, description: "노즈탭과 앤드워크를 활용한", tricks: ["노즈스톨", "스위치B/S락", "스위치F/S락앤롤"] }, { level: 2, description: "앤드워크를 활용한 리버트", tricks: ["테일스톨 B/S리버트", "테일스톨 F/S리버트"] }, { level: 1, description: "틱택과 테일탭을 활용한 스톨", tricks: ["B/S파이브오", "F/S파이브오"] }] },
+  { name: "에메랄드", color: "from-emerald-500 to-emerald-700", levels: [{ level: 3, description: "틱택을 활용한 스톨 (앞꿈치중심)", tricks: ["F/S피블스톨", "B/S스미스스톨"] }, { level: 2, description: "킥턴과 180알리를 활용한 락", tricks: ["행업", "B/S디제스터", "F/S디제스터"] }, { level: 1, description: "테일탭과 알리를 활용한", tricks: ["블런트 락투페이키", "블런트 노즈그랩 페이키"] }] },
+  { name: "다이아몬드", color: "from-sky-400 to-sky-600", levels: [{ level: 3, description: "틱택을 활용한 페이키아웃", tricks: ["B/S피블스톨 페이키", "B/S파이브오 페이키"] }, { level: 2, description: "앤드워크를 활용한 페이키아웃", tricks: ["F/S스미스스톨 페이키", "F/S파이브오 페이키"] }, { level: 1, description: "테일탭과 알리를 활용한", tricks: ["블런트 페이키", "널리 디제스터"] }] },
+  { name: "마스터", color: "from-purple-500 to-purple-700", levels: [{ level: 3, description: "락앤롤을 활용한 스톨", tricks: ["B/S허리케인", "F/S허리케인"] }, { level: 2, description: "노즈탭과 널리를 활용한", tricks: ["스위치블런트 락투페이키", "스위치블런트"] }, { level: 1, description: "킥턴과 180알리를 활용한 스톨", tricks: ["F/S테일스톨 (or린테일)", "B/S테일스톨 (or바디자)"] }] },
+  { name: "그랜드마스터", color: "from-red-600 to-red-800", levels: [{ level: 3, description: "노즈탭을 활용한 스톨", tricks: ["B/S크룩스톨", "F/S노즈스톨", "F/S파이브오투페이키"] }, { level: 2, description: "180회전을 활용한 블런트", tricks: ["B/S하프캡 블런트", "블런트B/S아웃", "블런트F/S아웃"] }, { level: 1, description: "디제스터를 활용한 스톨", tricks: ["B/S슈가케인", "F/S슈가케인"] }] },
+  { name: "챌린저", color: "from-cyan-400 to-cyan-600", levels: [{ level: 3, description: "스위치 블런트 활용", tricks: ["스위치 블런트EB/S아웃", "스위치 블런트EF/S아웃"] }, { level: 2, description: "180회전을 활용한 노즈블런트", tricks: ["B/S노즈블런트", "F/S노즈블런트"] }, { level: 1, description: "180알리를 활용한 노즈", tricks: ["B/S노즈픽", "F/S노즈픽"] }] }
 ];
 
 export default function RampPage() {
@@ -189,9 +84,7 @@ export default function RampPage() {
     const savedVideos = localStorage.getItem("skateflow-ramp-videos")
     if (savedVideos) setTrickVideos(JSON.parse(savedVideos))
     const handleClickOutside = (e: MouseEvent) => {
-      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
-        setIsSearchFocused(false)
-      }
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) setIsSearchFocused(false)
     }
     document.addEventListener("mousedown", handleClickOutside)
     return () => document.removeEventListener("mousedown", handleClickOutside)
@@ -206,6 +99,53 @@ export default function RampPage() {
       setEditingVideoIdx(null)
     }
   }, [selectedTrick, trickDescriptions])
+
+  // 영상 번호와 시간을 인식하여 점프
+  const jumpToVideoTime = (videoNum: number, timeStr: string) => {
+    const [min, sec] = timeStr.replace(/[()]/g, "").split(":").map(Number);
+    const totalSeconds = min * 60 + sec;
+    const videoIndex = videoNum - 1; // 사용자는 1번부터 입력하므로 인덱스는 -1
+    
+    if (selectedTrick) {
+      const videos = trickVideos[selectedTrick.name] || [];
+      if (videos[videoIndex]) {
+        const updatedVideos = [...videos];
+        // 선택된 순서의 영상만 타임스탬프 적용하여 교체
+        updatedVideos[videoIndex] = convertToEmbedUrl(videos[videoIndex], totalSeconds);
+        setTrickVideos({ ...trickVideos, [selectedTrick.name]: updatedVideos });
+        // LocalStorage 저장 (필요 시)
+        localStorage.setItem("skateflow-ramp-videos", JSON.stringify({ ...trickVideos, [selectedTrick.name]: updatedVideos }));
+      }
+    }
+  };
+
+  // "영상1(00:00)" 패턴 인식
+  const renderDescriptionWithLinks = (text: string) => {
+    const combinedPattern = /영상(\d+)\((\d{1,2}:\d{2})\)/g;
+    const parts = text.split(combinedPattern);
+    
+    // split에 그룹이 포함되면 [일반텍스트, 숫자, 시간, 일반텍스트...] 순서로 배열이 생성됨
+    const elements = [];
+    for (let i = 0; i < parts.length; i += 3) {
+      elements.push(<span key={`text-${i}`}>{parts[i]}</span>);
+      if (parts[i + 1] && parts[i + 2]) {
+        const videoNum = parseInt(parts[i + 1]);
+        const timeStr = parts[i + 2];
+        elements.push(
+          <button
+            key={`btn-${i}`}
+            onClick={() => jumpToVideoTime(videoNum, timeStr)}
+            className="text-primary font-bold hover:underline inline-flex items-center gap-0.5 mx-0.5 bg-primary/5 px-1 rounded"
+          >
+            <PlayCircle className="size-3" />
+            영상{videoNum}({timeStr})
+          </button>
+        );
+      }
+    }
+
+    return <div className="whitespace-pre-wrap leading-relaxed">{elements}</div>;
+  };
 
   const searchResults = searchQuery.trim() === "" ? [] : rampRanks.flatMap(rank => 
     rank.levels.flatMap(level => level.tricks
@@ -283,20 +223,11 @@ export default function RampPage() {
             </div>
             <div className="relative flex-1 md:max-w-md" ref={searchRef}>
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input 
-                placeholder="기술 검색..." 
-                className="pl-9" 
-                value={searchQuery} 
-                onFocus={() => setIsSearchFocused(true)}
-                onChange={(e) => setSearchQuery(e.target.value)} 
-              />
+              <Input placeholder="기술 검색..." className="pl-9" value={searchQuery} onFocus={() => setIsSearchFocused(true)} onChange={(e) => setSearchQuery(e.target.value)} />
               {isSearchFocused && searchResults.length > 0 && (
                 <div className="absolute top-full left-0 right-0 z-50 mt-2 max-h-[300px] overflow-y-auto rounded-md border bg-popover shadow-xl p-1">
                   {searchResults.map((r, i) => (
-                    <button key={i} onClick={() => handleTrickClick(r.name)} className="flex w-full flex-col p-2 hover:bg-accent rounded-sm text-left">
-                      <span className="text-sm font-bold">{r.name}</span>
-                      <span className="text-xs text-muted-foreground">{r.rankName} Lv.{r.level}</span>
-                    </button>
+                    <button key={i} onClick={() => handleTrickClick(r.name)} className="flex w-full flex-col p-2 hover:bg-accent rounded-sm text-left"><span className="text-sm font-bold">{r.name}</span><span className="text-xs text-muted-foreground">{r.rankName} Lv.{r.level}</span></button>
                   ))}
                 </div>
               )}
@@ -307,32 +238,16 @@ export default function RampPage() {
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        <div className="mb-10 text-center">
-          <h2 className="text-5xl font-black italic tracking-tighter text-primary">KBRT</h2>
-          <p className="text-muted-foreground font-mono uppercase">K&B Miniramp Rank Test</p>
-        </div>
-
+        <div className="mb-10 text-center"><h2 className="text-5xl font-black italic tracking-tighter text-primary">KBRT</h2><p className="text-muted-foreground font-mono uppercase">K&B Miniramp Rank Test</p></div>
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {rampRanks.map((rank) => (
             <div key={rank.name} className="rounded-2xl border bg-card p-5 shadow-sm">
-              <div className="mb-5 flex items-center gap-3">
-                <div className={`size-12 rounded-lg bg-gradient-to-br ${rank.color}`} />
-                <h3 className="text-xl font-bold italic">{rank.name}</h3>
-              </div>
+              <div className="mb-5 flex items-center gap-3"><div className={`size-12 rounded-lg bg-gradient-to-br ${rank.color}`} /><h3 className="text-xl font-bold italic">{rank.name}</h3></div>
               <div className="space-y-5">
                 {rank.levels.map((lv) => (
                   <div key={lv.level} className="space-y-2">
-                    <div className="flex items-center gap-2 border-b pb-1">
-                      <span className="text-xs font-black text-primary">{rank.name} {lv.level}</span>
-                      <span className="text-[10px] text-muted-foreground font-medium">{lv.description}</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {lv.tricks.map((trick, i) => (
-                        <button key={i} onClick={() => handleTrickClick(trick)} className="text-xs px-2 py-1 rounded bg-muted hover:bg-primary hover:text-white transition-colors">
-                          {trick}
-                        </button>
-                      ))}
-                    </div>
+                    <div className="flex items-center gap-2 border-b pb-1"><span className="text-xs font-black text-primary">{rank.name} {lv.level}</span><span className="text-[10px] text-muted-foreground font-medium">{lv.description}</span></div>
+                    <div className="flex flex-wrap gap-1.5">{lv.tricks.map((trick, i) => (<button key={i} onClick={() => handleTrickClick(trick)} className="text-xs px-2 py-1 rounded bg-muted hover:bg-primary hover:text-white transition-colors">{trick}</button>))}</div>
                   </div>
                 ))}
               </div>
@@ -355,26 +270,15 @@ export default function RampPage() {
                       <div className="flex items-center gap-2 text-xs font-bold opacity-50">
                         {url.includes("instagram") ? <Instagram className="size-3"/> : <Youtube className="size-3"/>}
                         VIDEO #{i+1}
-                        {url.includes("start=") && <span className="text-[10px] bg-primary/10 text-primary px-1 rounded">시간 지정됨</span>}
                       </div>
                       <div className="flex gap-1">
-                        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => startEditVideo(i, url)}>
-                          <Edit2 className="size-3 mr-1"/>수정
-                        </Button>
-                        <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive" onClick={() => deleteVideo(i)}>
-                          <Trash2 className="size-3 mr-1"/>삭제
-                        </Button>
+                        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => startEditVideo(i, url)}><Edit2 className="size-3 mr-1"/>수정</Button>
+                        <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive" onClick={() => deleteVideo(i)}><Trash2 className="size-3 mr-1"/>삭제</Button>
                       </div>
                     </div>
-                    
                     {editingVideoIdx === i ? (
-                      <div className="flex gap-2 bg-muted p-3 rounded-lg animate-in fade-in zoom-in duration-200">
-                        <Input 
-                          className="h-9 text-sm" 
-                          value={editingVideoUrl} 
-                          onChange={(e) => setEditingVideoUrl(e.target.value)}
-                          placeholder="주소 (예: ...&t=80s)"
-                        />
+                      <div className="flex gap-2 bg-muted p-3 rounded-lg">
+                        <Input className="h-9 text-sm" value={editingVideoUrl} onChange={(e) => setEditingVideoUrl(e.target.value)}/>
                         <Button size="sm" className="h-9 px-2" onClick={() => saveEditVideo(i)}><Check className="size-4"/></Button>
                         <Button size="sm" variant="ghost" className="h-9 px-2" onClick={() => setEditingVideoIdx(null)}><X className="size-4"/></Button>
                       </div>
@@ -391,34 +295,29 @@ export default function RampPage() {
             <div className="pt-4 border-t">
               {isAddingVideo ? (
                 <div className="flex flex-col gap-2">
-                  <Input placeholder="유튜브(시간지정 가능) 또는 인스타그램 주소" value={newVideoUrl} onChange={(e) => setNewVideoUrl(e.target.value)} />
-                  <p className="text-[10px] text-muted-foreground px-1">* 유튜브 주소 뒤에 &t=80s 를 붙이면 80초부터 재생됩니다.</p>
-                  <div className="flex gap-2 justify-end">
-                    <Button variant="ghost" size="sm" onClick={() => setIsAddingVideo(false)}>취소</Button>
-                    <Button size="sm" onClick={addVideo}>영상 등록</Button>
-                  </div>
+                  <Input placeholder="유튜브 또는 인스타그램 주소" value={newVideoUrl} onChange={(e) => setNewVideoUrl(e.target.value)} />
+                  <div className="flex gap-2 justify-end"><Button variant="ghost" size="sm" onClick={() => setIsAddingVideo(false)}>취소</Button><Button size="sm" onClick={addVideo}>영상 등록</Button></div>
                 </div>
               ) : (
-                <Button variant="outline" className="w-full border-dashed" onClick={() => setIsAddingVideo(true)}>
-                  <Plus className="mr-2 size-4"/>새 영상 추가
-                </Button>
+                <Button variant="outline" className="w-full border-dashed" onClick={() => setIsAddingVideo(true)}><Plus className="mr-2 size-4"/>새 영상 추가</Button>
               )}
             </div>
 
             <div className="space-y-2 border-t pt-4">
               <div className="flex justify-between items-center">
                 <span className="text-xs font-bold">노하우 & 팁</span>
-                <Button size="sm" variant="ghost" onClick={() => isEditingDescription ? saveDescription() : setIsEditingDescription(true)}>
-                  {isEditingDescription ? "저장" : "수정"}
-                </Button>
+                <Button size="sm" variant="ghost" onClick={() => isEditingDescription ? saveDescription() : setIsEditingDescription(true)}>{isEditingDescription ? "저장" : "수정"}</Button>
               </div>
-              <Textarea 
-                value={currentDescription} 
-                onChange={(e) => setCurrentDescription(e.target.value)} 
-                disabled={!isEditingDescription} 
-                className="min-h-[100px] bg-muted/30 border-none resize-none" 
-                placeholder="기술 성공을 위한 팁을 입력하세요..."
-              />
+              {isEditingDescription ? (
+                <div className="space-y-2">
+                  <Textarea value={currentDescription} onChange={(e) => setCurrentDescription(e.target.value)} className="min-h-[120px] bg-muted/30 border-none resize-none" placeholder="입력 예: 영상1(00:20) 이 부분 자세 참고, 영상2(01:05) 착지 지점 확인" />
+                  <p className="text-[10px] text-muted-foreground italic">※ '영상번호(분:초)' 형식으로 입력하면 해당 영상의 시간이 링크됩니다.</p>
+                </div>
+              ) : (
+                <div className="p-3 rounded-md bg-muted/30 text-sm min-h-[60px]">
+                  {currentDescription ? renderDescriptionWithLinks(currentDescription) : <span className="text-muted-foreground italic">팁이 없습니다.</span>}
+                </div>
+              )}
             </div>
           </div>
         </DialogContent>
