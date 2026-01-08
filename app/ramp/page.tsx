@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
+
 const convertToEmbedUrl = (url: string, startTime?: number) => {
   if (!url) return "";
   try {
@@ -32,8 +34,10 @@ const convertToEmbedUrl = (url: string, startTime?: number) => {
     return url;
   } catch (e) { return url; }
 };
+
 type RankLevel = { level: number; description: string; tricks: string[] }
 type RankCategory = { name: string; color: string; levels: RankLevel[] }
+
 const rampRanks: RankCategory[] = [
   { name: "아이언", color: "from-stone-600 to-stone-800", levels: [{ level: 3, description: "진자운동 하프파이프", tricks: ["락인", "락투페이키", "스위치 락투페이키"] }, { level: 2, description: "테일탭 활용한", tricks: ["드롭인", "테일스톨"] }, { level: 1, description: "킥턴 활용한 락", tricks: ["B/S하프캡 락투페이키", "B/S락앤롤", "B/S하프캡 락앤롤"] }] },
   { name: "브론즈", color: "from-amber-600 to-amber-800", levels: [{ level: 3, description: "틱택을 활용한 스톨 (뒷꿈치중심)", tricks: ["페이키 F/S엑슬스톨", "페이키 F/S스미스스톨"] }, { level: 2, description: "틱택을 활용한 스톨 (뒷꿈치중심)", tricks: ["B/S피블스톨", "B/S엑슬스톨"] }, { level: 1, description: "틱택을 활용한 스톨 (앞꿈치중심)", tricks: ["페이키 B/S엑슬스톨", "페이키 B/S스미스스톨"] }] },
@@ -46,7 +50,15 @@ const rampRanks: RankCategory[] = [
   { name: "그랜드마스터", color: "from-red-600 to-red-800", levels: [{ level: 3, description: "노즈탭을 활용한 스톨", tricks: ["B/S크룩스톨", "F/S노즈스톨", "F/S파이브오투페이키"] }, { level: 2, description: "180회전을 활용한 블런트", tricks: ["B/S하프캡 블런트", "블런트B/S아웃", "블런트F/S아웃"] }, { level: 1, description: "디제스터를 활용한 스톨", tricks: ["B/S슈가케인", "F/S슈가케인"] }] },
   { name: "챌린저", color: "from-cyan-400 to-cyan-600", levels: [{ level: 3, description: "스위치 블런트 활용", tricks: ["스위치 블런트EB/S아웃", "스위치 블런트EF/S아웃"] }, { level: 2, description: "180회전을 활용한 노즈블런트", tricks: ["B/S노즈블런트", "F/S노즈블런트"] }, { level: 1, description: "180알리를 활용한 노즈", tricks: ["B/S노즈픽", "F/S노즈픽"] }] }
 ];
+
+const navigationTabs = [
+  { name: "RAMP", href: "/ramp" },
+  { name: "STREET", href: "/street" },
+  { name: "TRANSITION", href: "/transition" },
+];
+
 export default function RampPage() {
+  const pathname = usePathname();
   const [selectedTrick, setSelectedTrick] = useState<{ name: string } | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [trickDescriptions, setTrickDescriptions] = useState<Record<string, string>>({})
@@ -59,6 +71,7 @@ export default function RampPage() {
   const [editingVideoUrl, setEditingVideoUrl] = useState("")
   const [isSearchFocused, setIsSearchFocused] = useState(false)
   const searchRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     const savedDesc = localStorage.getItem("skateflow-ramp-descriptions")
     if (savedDesc) setTrickDescriptions(JSON.parse(savedDesc))
@@ -68,12 +81,14 @@ export default function RampPage() {
     document.addEventListener("mousedown", handleClickOutside)
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [])
+
   useEffect(() => {
     if (selectedTrick) {
       setCurrentDescription(trickDescriptions[selectedTrick.name] || "")
       setIsEditingDescription(false); setNewVideoUrl(""); setIsAddingVideo(false); setEditingVideoIdx(null);
     }
   }, [selectedTrick, trickDescriptions])
+
   const jumpToVideoTime = (videoNum: number, timeStr: string) => {
     const [min, sec] = timeStr.replace(/[()]/g, "").split(":").map(Number);
     const totalSeconds = min * 60 + sec;
@@ -94,6 +109,7 @@ export default function RampPage() {
       }
     }
   };
+
   const renderDescriptionWithLinks = (text: string) => {
     const combinedPattern = /영상(\d+)\((\d{1,2}:\d{2})\)/g;
     const parts = text.split(combinedPattern);
@@ -115,12 +131,14 @@ export default function RampPage() {
     }
     return <div className="whitespace-pre-wrap leading-relaxed">{elements}</div>;
   };
+
   const saveDescription = () => {
     if (selectedTrick) {
       const updated = { ...trickDescriptions, [selectedTrick.name]: currentDescription }
       setTrickDescriptions(updated); localStorage.setItem("skateflow-ramp-descriptions", JSON.stringify(updated)); setIsEditingDescription(false)
     }
   }
+
   const addVideo = () => {
     if (selectedTrick && newVideoUrl.trim()) {
       const embedUrl = convertToEmbedUrl(newVideoUrl.trim());
@@ -129,6 +147,7 @@ export default function RampPage() {
       setTrickVideos(updated); localStorage.setItem("skateflow-ramp-videos", JSON.stringify(updated)); setNewVideoUrl(""); setIsAddingVideo(false)
     }
   }
+
   const startEditVideo = (idx: number, url: string) => { setEditingVideoIdx(idx); setEditingVideoUrl(url) }
   const saveEditVideo = (idx: number) => {
     if (selectedTrick && editingVideoUrl.trim()) {
@@ -138,6 +157,7 @@ export default function RampPage() {
       setTrickVideos(updated); localStorage.setItem("skateflow-ramp-videos", JSON.stringify(updated)); setEditingVideoIdx(null)
     }
   }
+
   const deleteVideo = (idx: number) => {
     if (selectedTrick) {
       const current = trickVideos[selectedTrick.name] || []
@@ -145,16 +165,23 @@ export default function RampPage() {
       setTrickVideos(updated); localStorage.setItem("skateflow-ramp-videos", JSON.stringify(updated))
     }
   }
+
   const handleTrickClick = (trickName: string) => { setSelectedTrick({ name: trickName }); setSearchQuery(""); setIsSearchFocused(false) }
   const searchResults = searchQuery ? rampRanks.flatMap(r => r.levels.flatMap(l => l.tricks.filter(t => t.toLowerCase().includes(searchQuery.toLowerCase())).map(t => ({ name: t, rankName: r.name, level: l.level })))) : []
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b bg-card sticky top-0 z-40">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-4">
-              <Link href="/"><Button variant="ghost" size="icon"><ArrowLeft className="size-5" /></Button></Link>
-              <h1 className="font-mono text-2xl font-bold text-primary">SkateFlow</h1>
+        <div className="container mx-auto px-4">
+          <div className="flex flex-col md:flex-row md:items-center py-4 gap-4">
+            <div className="flex items-center justify-between flex-1">
+              <div className="flex items-center gap-4">
+                <Link href="/"><Button variant="ghost" size="icon"><ArrowLeft className="size-5" /></Button></Link>
+                <h1 className="font-mono text-2xl font-bold text-primary tracking-tighter">SkateFlow</h1>
+              </div>
+              <div className="flex md:hidden">
+                <Button variant="ghost" size="icon"><User className="size-5" /></Button>
+              </div>
             </div>
             <div className="relative flex-1 md:max-w-md" ref={searchRef}>
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -167,10 +194,25 @@ export default function RampPage() {
                 </div>
               )}
             </div>
-            <Button variant="ghost" size="icon"><User className="size-5" /></Button>
+            <div className="hidden md:flex">
+              <Button variant="ghost" size="icon"><User className="size-5" /></Button>
+            </div>
           </div>
+          <nav className="flex gap-1 pb-px overflow-x-auto no-scrollbar">
+            {navigationTabs.map((tab) => {
+              const isActive = pathname === tab.href;
+              return (
+                <Link key={tab.name} href={tab.href} className="flex-1 min-w-[100px] max-w-[200px]">
+                  <button className={`w-full py-3 text-xs font-black italic transition-all border-b-2 ${isActive ? "border-primary text-primary bg-primary/5 shadow-[inset_0_-2px_0_0_rgba(var(--primary),1)]" : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"}`}>
+                    {tab.name}
+                  </button>
+                </Link>
+              );
+            })}
+          </nav>
         </div>
       </header>
+
       <main className="container mx-auto px-4 py-8">
         <div className="mb-10 text-center"><h2 className="text-5xl font-black italic tracking-tighter text-primary">KBRT</h2><p className="text-muted-foreground font-mono uppercase text-xs">K&B Miniramp Rank Test</p></div>
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -189,6 +231,7 @@ export default function RampPage() {
           ))}
         </div>
       </main>
+
       <Dialog open={!!selectedTrick} onOpenChange={() => setSelectedTrick(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto scrollbar-thin">
           <DialogHeader><DialogTitle className="text-2xl font-black italic">{selectedTrick?.name}</DialogTitle></DialogHeader>
