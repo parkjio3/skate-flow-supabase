@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
-// --- 주소 변환 및 시간 파라미터 처리 유틸리티 (검토 완료) ---
+// --- 주소 변환 및 시간 파라미터 처리 유틸리티 ---
 const convertToEmbedUrl = (url: string, startTime?: number) => {
   if (!url) return "";
   try {
@@ -95,6 +95,7 @@ const streetTricks: Trick[] = [
   { id: "sh8", category: "샤빗", name: "페이키FS샤빗", videoUrl: "" },
   { id: "sh9", category: "샤빗", name: "페이키FS빅스핀", videoUrl: "" },
   { id: "sh10", category: "샤빗", name: "FS빅스핀", videoUrl: "" },
+  { id: "sh11", category: "샤빗", name: "임파서블", videoUrl: "" },
   { id: "r1", category: "회전", name: "BS180알리", videoUrl: "" },
   { id: "r2", category: "회전", name: "BS360알리", videoUrl: "" },
   { id: "r3", category: "회전", name: "BS하프캡", videoUrl: "" },
