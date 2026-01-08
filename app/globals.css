@@ -1,15 +1,11 @@
-/* Tailwind 전용 선언(@import, @tailwind, @theme)을 모두 제거했습니다. */
-
 :root {
-  /* Dark skateboarding theme colors */
-  /* oklch를 지원하지 않는 브라우저를 위해 일반 색상값으로 변환하여 유지합니다. */
   --background: #1a1b1e;
   --foreground: #f8f9fa;
   --card: #25262b;
   --card-foreground: #f8f9fa;
   --popover: #212226;
   --popover-foreground: #f8f9fa;
-  --primary: #4d79ff; /* Electric blue accent */
+  --primary: #4d79ff;
   --primary-foreground: #ffffff;
   --secondary: #2c2e33;
   --secondary-foreground: #f8f9fa;
@@ -23,24 +19,12 @@
   --input: #373a40;
   --ring: #4d79ff;
   --radius: 0.75rem;
-  
-  /* Sidebar colors */
-  --sidebar: #25262b;
-  --sidebar-foreground: #f8f9fa;
-  --sidebar-primary: #4d79ff;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #2c2e33;
-  --sidebar-accent-foreground: #f8f9fa;
-  --sidebar-border: #373a40;
-  --sidebar-ring: #4d79ff;
 }
 
-/* 기본 초기화 스타일 */
 * {
   box-sizing: border-box;
   padding: 0;
   margin: 0;
-  /* 기존 @apply border-border 역할을 대신함 */
   border-color: var(--border);
   border-style: solid;
   border-width: 0;
@@ -49,23 +33,10 @@
 body {
   background-color: var(--background);
   color: var(--foreground);
-  font-family: "Geist", sans-serif;
+  font-family: sans-serif;
   line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
-/* 기존 @layer base 내의 스타일을 일반 CSS로 변환 */
-* {
-  border-color: var(--border);
-}
-
-*:focus-visible {
-  outline: 2px solid rgba(77, 121, 255, 0.5); /* outline-ring/50 대체 */
-}
-
-/* 유틸리티 클래스 (선택 사항: 기존 컴포넌트들이 이 클래스를 사용할 경우) */
+/* 기본적인 레이아웃 유지용 클래스 */
 .bg-background { background-color: var(--background); }
 .text-foreground { color: var(--foreground); }
-.border-border { border-color: var(--border); }
-.rounded-lg { border-radius: var(--radius); }
