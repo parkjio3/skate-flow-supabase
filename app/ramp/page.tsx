@@ -1,18 +1,18 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Search, User, ArrowLeft, Plus, Trash2, Instagram, Youtube, Edit2, Check, X, PlayCircle, ExternalLink, AlertCircle } from "lucide-react"
+import { Search, User, ArrowLeft, Plus, Trash2, Instagram, Youtube, Edit2, Check, X, PlayCircle, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 
 // --- 주소 변환 및 시간 파라미터 처리 유틸리티 ---
 const convertToEmbedUrl = (url: string, startTime?: number) => {
   if (!url) return "";
   try {
-    // 유튜브 처리
     if (url.includes("youtube.com") || url.includes("youtu.be") || url.includes("youtube.com/embed/")) {
       let videoId = "";
       if (url.includes("youtube.com/embed/")) {
@@ -32,7 +32,6 @@ const convertToEmbedUrl = (url: string, startTime?: number) => {
       }
     }
 
-    // 인스타그램 처리 (임베드용)
     if (url.includes("instagram.com")) {
       let baseUrl = url.split("?")[0];
       if (baseUrl.endsWith("/")) baseUrl = baseUrl.slice(0, -1);
@@ -61,7 +60,14 @@ const rampRanks: RankCategory[] = [
   { name: "챌린저", color: "from-cyan-400 to-cyan-600", levels: [{ level: 3, description: "스위치 블런트 활용", tricks: ["스위치 블런트EB/S아웃", "스위치 블런트EF/S아웃"] }, { level: 2, description: "180회전을 활용한 노즈블런트", tricks: ["B/S노즈블런트", "F/S노즈블런트"] }, { level: 1, description: "180알리를 활용한 노즈", tricks: ["B/S노즈픽", "F/S노즈픽"] }] }
 ];
 
+const navigationTabs = [
+  { name: "RAMP", href: "/ramp" },
+  { name: "STREET", href: "/street" },
+  { name: "TRANSITION", href: "/transition" },
+];
+
 export default function RampPage() {
+  const pathname = usePathname();
   const [selectedTrick, setSelectedTrick] = useState<{ name: string } | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [trickDescriptions, setTrickDescriptions] = useState<Record<string, string>>({})
@@ -75,11 +81,16 @@ export default function RampPage() {
   const [isSearchFocused, setIsSearchFocused] = useState(false)
   const searchRef = useRef<HTMLDivElement>(null)
 
+  // Hydration 오류 방지를 위해 마운트 완료 여부 확인
+  const [isMounted, setIsMounted] = useState(false);
+
   useEffect(() => {
+    setIsMounted(true);
     const savedDesc = localStorage.getItem("skateflow-ramp-descriptions")
     if (savedDesc) setTrickDescriptions(JSON.parse(savedDesc))
     const savedVideos = localStorage.getItem("skateflow-ramp-videos")
     if (savedVideos) setTrickVideos(JSON.parse(savedVideos))
+    
     const handleClickOutside = (e: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) setIsSearchFocused(false)
     }
@@ -97,6 +108,8 @@ export default function RampPage() {
     }
   }, [selectedTrick, trickDescriptions])
 
+  if (!isMounted) return null; // 마운트 전에는 렌더링하지 않음
+
   const jumpToVideoTime = (videoNum: number, timeStr: string) => {
     const [min, sec] = timeStr.replace(/[()]/g, "").split(":").map(Number);
     const totalSeconds = min * 60 + sec;
@@ -108,15 +121,11 @@ export default function RampPage() {
       
       if (targetUrl) {
         if (targetUrl.includes("instagram.com")) {
-          // 인스타그램: /embed를 제거하고 원본 URL에 ?t=XXs 형식으로 새 탭 연결
           let cleanUrl = targetUrl.replace("/embed", "").split("?")[0];
           if (cleanUrl.endsWith("/")) cleanUrl = cleanUrl.slice(0, -1);
-          
-          // 최종 주소: https://www.instagram.com/reels/CODE/?t=10s
           const finalUrl = `${cleanUrl}/?t=${totalSeconds}s`;
           window.open(finalUrl, "_blank");
         } else {
-          // 유튜브: iframe 내부 주소 업데이트
           const updatedVideos = [...videos];
           updatedVideos[videoIndex] = convertToEmbedUrl(targetUrl, totalSeconds);
           setTrickVideos({ ...trickVideos, [selectedTrick.name]: updatedVideos });
@@ -215,39 +224,99 @@ export default function RampPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b bg-card sticky top-0 z-40">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-4">
-              <Link href="/"><Button variant="ghost" size="icon"><ArrowLeft className="size-5" /></Button></Link>
-              <h1 className="font-mono text-2xl font-bold text-primary">SkateFlow</h1>
+        <div className="container mx-auto px-4">
+          <div className="flex flex-col md:flex-row md:items-center py-4 gap-4">
+            <div className="flex items-center justify-between flex-1">
+              <div className="flex items-center gap-4">
+                <Link href="/">
+                  <Button variant="ghost" size="icon">
+                    <ArrowLeft className="size-5" />
+                  </Button>
+                </Link>
+                <h1 className="font-mono text-2xl font-bold text-primary tracking-tighter">SkateFlow</h1>
+              </div>
+              <div className="flex md:hidden">
+                <Button variant="ghost" size="icon"><User className="size-5" /></Button>
+              </div>
             </div>
+
             <div className="relative flex-1 md:max-w-md" ref={searchRef}>
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input placeholder="기술 검색..." className="pl-9" value={searchQuery} onFocus={() => setIsSearchFocused(true)} onChange={(e) => setSearchQuery(e.target.value)} />
+              <Input 
+                placeholder="기술 검색..." 
+                className="pl-9" 
+                value={searchQuery} 
+                onFocus={() => setIsSearchFocused(true)} 
+                onChange={(e) => setSearchQuery(e.target.value)} 
+              />
               {isSearchFocused && searchResults.length > 0 && (
                 <div className="absolute top-full left-0 right-0 z-50 mt-2 max-h-[300px] overflow-y-auto rounded-md border bg-popover shadow-xl p-1">
                   {searchResults.map((r, i) => (
-                    <button key={i} onClick={() => handleTrickClick(r.name)} className="flex w-full flex-col p-2 hover:bg-accent rounded-sm text-left"><span className="text-sm font-bold">{r.name}</span><span className="text-xs text-muted-foreground">{r.rankName} Lv.{r.level}</span></button>
+                    <button key={i} onClick={() => handleTrickClick(r.name)} className="flex w-full flex-col p-2 hover:bg-accent rounded-sm text-left">
+                      <span className="text-sm font-bold">{r.name}</span>
+                      <span className="text-xs text-muted-foreground">{r.rankName} Lv.{r.level}</span>
+                    </button>
                   ))}
                 </div>
               )}
             </div>
-            <Button variant="ghost" size="icon"><User className="size-5" /></Button>
+            
+            <div className="hidden md:flex">
+              <Button variant="ghost" size="icon"><User className="size-5" /></Button>
+            </div>
           </div>
+
+          <nav className="flex gap-1 pb-px overflow-x-auto no-scrollbar">
+            {navigationTabs.map((tab) => {
+              const isActive = pathname === tab.href;
+              return (
+                <Link key={tab.name} href={tab.href} className="flex-1 min-w-[100px] max-w-[200px]">
+                  <button
+                    className={`w-full py-3 text-xs font-black italic transition-all border-b-2 ${
+                      isActive 
+                        ? "border-primary text-primary bg-primary/5 shadow-[inset_0_-2px_0_0_rgba(var(--primary),1)]" 
+                        : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    }`}
+                  >
+                    {tab.name}
+                  </button>
+                </Link>
+              );
+            })}
+          </nav>
         </div>
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        <div className="mb-10 text-center"><h2 className="text-5xl font-black italic tracking-tighter text-primary">KBRT</h2><p className="text-muted-foreground font-mono uppercase">K&B Miniramp Rank Test</p></div>
+        <div className="mb-10 text-center">
+          <h2 className="text-5xl font-black italic tracking-tighter text-primary">KBRT</h2>
+          <p className="text-muted-foreground font-mono uppercase">K&B Miniramp Rank Test</p>
+        </div>
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {rampRanks.map((rank) => (
-            <div key={rank.name} className="rounded-2xl border bg-card p-5 shadow-sm">
-              <div className="mb-5 flex items-center gap-3"><div className={`size-12 rounded-lg bg-gradient-to-br ${rank.color}`} /><h3 className="text-xl font-bold italic">{rank.name}</h3></div>
+            <div key={rank.name} className="rounded-2xl border bg-card p-5 shadow-sm hover:shadow-md transition-shadow">
+              <div className="mb-5 flex items-center gap-3">
+                <div className={`size-12 rounded-lg bg-gradient-to-br ${rank.color}`} />
+                <h3 className="text-xl font-bold italic">{rank.name}</h3>
+              </div>
               <div className="space-y-5">
                 {rank.levels.map((lv) => (
                   <div key={lv.level} className="space-y-2">
-                    <div className="flex items-center gap-2 border-b pb-1"><span className="text-xs font-black text-primary">{rank.name} {lv.level}</span><span className="text-[10px] text-muted-foreground font-medium">{lv.description}</span></div>
-                    <div className="flex flex-wrap gap-1.5">{lv.tricks.map((trick, i) => (<button key={i} onClick={() => handleTrickClick(trick)} className="text-xs px-2 py-1 rounded bg-muted hover:bg-primary hover:text-white transition-colors">{trick}</button>))}</div>
+                    <div className="flex items-center gap-2 border-b pb-1">
+                      <span className="text-xs font-black text-primary">{rank.name} {lv.level}</span>
+                      <span className="text-[10px] text-muted-foreground font-medium">{lv.description}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {lv.tricks.map((trick, i) => (
+                        <button 
+                          key={i} 
+                          onClick={() => handleTrickClick(trick)} 
+                          className="text-xs px-2 py-1 rounded bg-muted hover:bg-primary hover:text-white transition-colors"
+                        >
+                          {trick}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -258,22 +327,25 @@ export default function RampPage() {
 
       <Dialog open={!!selectedTrick} onOpenChange={() => setSelectedTrick(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle className="text-2xl font-black italic">{selectedTrick?.name}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black italic">{selectedTrick?.name}</DialogTitle>
+          </DialogHeader>
           <div className="space-y-6">
             <div className="space-y-8">
               {(trickVideos[selectedTrick?.name || ""] || []).length === 0 ? (
-                <div className="aspect-video flex items-center justify-center border-2 border-dashed rounded-xl text-muted-foreground text-sm">유튜브/인스타 영상을 추가하세요.</div>
+                <div className="aspect-video flex items-center justify-center border-2 border-dashed rounded-xl text-muted-foreground text-sm">
+                  유튜브/인스타 영상을 추가하세요.
+                </div>
               ) : (
                 trickVideos[selectedTrick?.name || ""].map((url, i) => (
                   <div key={i} className="space-y-3 pb-6 border-b last:border-0">
                     <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2 text-xs font-bold opacity-50">
-                        {url.includes("instagram") ? <Instagram className="size-3"/> : <Youtube className="size-3"/>}
-                        VIDEO #{i+1}
+                      <div className="flex items-center gap-2 text-xs font-bold opacity-50 uppercase tracking-widest">
+                        {url.includes("instagram") ? "Instagram" : "Youtube"} VIDEO #{i+1}
                       </div>
                       <div className="flex gap-1">
-                        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => startEditVideo(i, url)}><Edit2 className="size-3 mr-1"/>수정</Button>
-                        <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive" onClick={() => deleteVideo(i)}><Trash2 className="size-3 mr-1"/>삭제</Button>
+                        <button onClick={() => startEditVideo(i, url)} className="flex items-center px-2 py-1 text-xs hover:bg-muted rounded text-muted-foreground"><Edit2 className="size-3 mr-1"/>수정</button>
+                        <button onClick={() => deleteVideo(i)} className="flex items-center px-2 py-1 text-xs hover:bg-destructive/10 rounded text-destructive"><Trash2 className="size-3 mr-1"/>삭제</button>
                       </div>
                     </div>
                     {editingVideoIdx === i ? (
@@ -296,25 +368,32 @@ export default function RampPage() {
               {isAddingVideo ? (
                 <div className="flex flex-col gap-2">
                   <Input placeholder="유튜브 또는 인스타그램 주소" value={newVideoUrl} onChange={(e) => setNewVideoUrl(e.target.value)} />
-                  <div className="flex gap-2 justify-end"><Button variant="ghost" size="sm" onClick={() => setIsAddingVideo(false)}>취소</Button><Button size="sm" onClick={addVideo}>영상 등록</Button></div>
+                  <div className="flex gap-2 justify-end">
+                    <Button variant="ghost" size="sm" onClick={() => setIsAddingVideo(false)}>취소</Button>
+                    <Button size="sm" onClick={addVideo}>영상 등록</Button>
+                  </div>
                 </div>
               ) : (
-                <Button variant="outline" className="w-full border-dashed" onClick={() => setIsAddingVideo(true)}><Plus className="mr-2 size-4"/>새 영상 추가</Button>
+                <Button variant="outline" className="w-full border-dashed py-6" onClick={() => setIsAddingVideo(true)}>
+                  <Plus className="mr-2 size-4"/>새 영상 추가
+                </Button>
               )}
             </div>
 
             <div className="space-y-2 border-t pt-4">
-              <div className="flex justify-between items-center">
-                <span className="text-xs font-bold">노하우 & 팁</span>
-                <Button size="sm" variant="ghost" onClick={() => isEditingDescription ? saveDescription() : setIsEditingDescription(true)}>{isEditingDescription ? "저장" : "수정"}</Button>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-bold uppercase tracking-wider opacity-60">노하우 & 팁</span>
+                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => isEditingDescription ? saveDescription() : setIsEditingDescription(true)}>
+                  {isEditingDescription ? "저장" : "수정"}
+                </Button>
               </div>
               {isEditingDescription ? (
                 <div className="space-y-2">
-                  <Textarea value={currentDescription} onChange={(e) => setCurrentDescription(e.target.value)} className="min-h-[120px] bg-muted/30 border-none resize-none" placeholder="영상1(00:20) 처럼 작성하세요." />
+                  <Textarea value={currentDescription} onChange={(e) => setCurrentDescription(e.target.value)} className="min-h-[120px] bg-muted/30 border-none resize-none focus-visible:ring-1" placeholder="영상1(00:20) 처럼 작성하면 링크가 생깁니다." />
                 </div>
               ) : (
-                <div className="p-3 rounded-md bg-muted/30 text-sm min-h-[60px]">
-                  {currentDescription ? renderDescriptionWithLinks(currentDescription) : <span className="text-muted-foreground italic">팁이 없습니다.</span>}
+                <div className="p-4 rounded-md bg-muted/30 text-sm min-h-[60px] border border-transparent">
+                  {currentDescription ? renderDescriptionWithLinks(currentDescription) : <span className="text-muted-foreground italic">아직 등록된 팁이 없습니다.</span>}
                 </div>
               )}
             </div>
