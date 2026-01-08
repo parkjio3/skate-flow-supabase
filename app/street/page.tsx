@@ -11,6 +11,7 @@ import { usePathname } from "next/navigation"
 import { createClient } from "@supabase/supabase-js"
 
 // --- Supabase 클라이언트 설정 ---
+// 환경변수가 없을 경우를 대비해 null 병합 연산자 사용
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
 const supabase = createClient(supabaseUrl, supabaseAnonKey)
@@ -207,7 +208,6 @@ export default function StreetPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   
-  // --- Supabase 연동 상태 ---
   const [trickDescriptions, setTrickDescriptions] = useState<Record<string, string>>({});
   const [trickVideos, setTrickVideos] = useState<Record<string, string[]>>({});
   
@@ -219,7 +219,26 @@ export default function StreetPage() {
   const [editingVideoUrl, setEditingVideoUrl] = useState("");
   const searchRef = useRef<HTMLDivElement>(null);
 
-  // 1. 초기 데이터 로드 (Supabase에서 가져오기)
+  // 데이터 동기화 함수를 useEffect 밖으로 뺌
+  const fetchDataFromSupabase = async () => {
+    try {
+      const { data, error } = await supabase.from("tricks_data").select("*");
+      if (error) throw error;
+      if (data) {
+        const descMap: Record<string, string> = {};
+        const videoMap: Record<string, string[]> = {};
+        data.forEach((row) => {
+          descMap[row.trick_name] = row.description || "";
+          videoMap[row.trick_name] = row.video_urls || [];
+        });
+        setTrickDescriptions(descMap);
+        setTrickVideos(videoMap);
+      }
+    } catch (err) {
+      console.error("Data fetch error:", err);
+    }
+  };
+
   useEffect(() => {
     setIsMounted(true);
     fetchDataFromSupabase();
@@ -231,32 +250,13 @@ export default function StreetPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const fetchDataFromSupabase = async () => {
-    const { data, error } = await supabase.from("tricks_data").select("*");
-    if (error) {
-      console.error("데이터 로드 실패:", error);
-      return;
-    }
-    if (data) {
-      const descMap: Record<string, string> = {};
-      const videoMap: Record<string, string[]> = {};
-      data.forEach((row) => {
-        descMap[row.trick_name] = row.description;
-        videoMap[row.trick_name] = row.video_urls || [];
-      });
-      setTrickDescriptions(descMap);
-      setTrickVideos(videoMap);
-    }
-  };
-
-  // 2. 공통 업서트(Upsert) 함수 (DB에 즉시 저장)
   const updateSupabase = async (name: string, id: string, desc: string, urls: string[]) => {
     const { error } = await supabase.from("tricks_data").upsert(
       { trick_id: id, trick_name: name, description: desc, video_urls: urls },
       { onConflict: "trick_id" }
     );
-    if (error) console.error("저장 실패:", error);
-    else fetchDataFromSupabase(); // 최신 데이터로 동기화
+    if (error) console.error("Update error:", error);
+    else fetchDataFromSupabase();
   };
 
   useEffect(() => {
@@ -271,8 +271,9 @@ export default function StreetPage() {
 
   if (!isMounted) return null;
 
-  // --- 비디오 타임라인 점프 ---
   const jumpToVideoTime = (videoNum: number, timeStr: string) => {
+    if (typeof window === "undefined") return; // SSR 오류 방지
+
     const [min, sec] = timeStr.replace(/[()]/g, "").split(":").map(Number);
     const totalSeconds = min * 60 + sec;
     const videoIndex = videoNum - 1;
@@ -293,7 +294,6 @@ export default function StreetPage() {
     }
   };
 
-  // --- 렌더링: 팁 내 링크 활성화 ---
   const renderDescriptionWithLinks = (text: string) => {
     const combinedPattern = /영상(\d+)\((\d{1,2}:\d{2})\)/g;
     const parts = text.split(combinedPattern);
@@ -322,15 +322,9 @@ export default function StreetPage() {
     return <div className="whitespace-pre-wrap leading-relaxed">{elements}</div>;
   };
 
-  // --- 데이터 수정 핸들러 ---
   const saveDescription = () => {
     if (selectedTrick) {
-      updateSupabase(
-        selectedTrick.name,
-        selectedTrick.id,
-        currentDescription,
-        trickVideos[selectedTrick.name] || []
-      );
+      updateSupabase(selectedTrick.name, selectedTrick.id, currentDescription, trickVideos[selectedTrick.name] || []);
       setIsEditingDescription(false);
     }
   };
@@ -339,12 +333,7 @@ export default function StreetPage() {
     if (selectedTrick && newVideoUrl.trim()) {
       const embeddedUrl = convertToEmbedUrl(newVideoUrl.trim());
       const currentUrls = [...(trickVideos[selectedTrick.name] || []), embeddedUrl];
-      updateSupabase(
-        selectedTrick.name,
-        selectedTrick.id,
-        trickDescriptions[selectedTrick.name] || "",
-        currentUrls
-      );
+      updateSupabase(selectedTrick.name, selectedTrick.id, trickDescriptions[selectedTrick.name] || "", currentUrls);
       setNewVideoUrl("");
       setIsAddingVideo(false);
     }
@@ -355,12 +344,7 @@ export default function StreetPage() {
       const embedUrl = convertToEmbedUrl(editingVideoUrl.trim());
       const currentUrls = [...(trickVideos[selectedTrick.name] || [])];
       currentUrls[idx] = embedUrl;
-      updateSupabase(
-        selectedTrick.name,
-        selectedTrick.id,
-        trickDescriptions[selectedTrick.name] || "",
-        currentUrls
-      );
+      updateSupabase(selectedTrick.name, selectedTrick.id, trickDescriptions[selectedTrick.name] || "", currentUrls);
       setEditingVideoIdx(null);
     }
   };
@@ -368,12 +352,7 @@ export default function StreetPage() {
   const deleteVideo = (idx: number) => {
     if (selectedTrick) {
       const currentUrls = (trickVideos[selectedTrick.name] || []).filter((_, i) => i !== idx);
-      updateSupabase(
-        selectedTrick.name,
-        selectedTrick.id,
-        trickDescriptions[selectedTrick.name] || "",
-        currentUrls
-      );
+      updateSupabase(selectedTrick.name, selectedTrick.id, trickDescriptions[selectedTrick.name] || "", currentUrls);
     }
   };
 
@@ -470,7 +449,7 @@ export default function StreetPage() {
                   <Youtube className="size-8 opacity-20 mb-2" />등록된 학습 영상이 없습니다.
                 </div>
               ) : (
-                trickVideos[selectedTrick?.name || ""].map((url, i) => (
+                (trickVideos[selectedTrick?.name || ""]).map((url, i) => (
                   <div key={i} className="space-y-3 pb-6 border-b last:border-0">
                     <div className="flex justify-between items-center">
                       <div className="text-[10px] font-bold opacity-50 uppercase tracking-widest">
