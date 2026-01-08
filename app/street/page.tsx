@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Search, User, ArrowLeft, Plus, Trash2, Instagram, Youtube, Edit2, Check, X, PlayCircle, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,9 +11,8 @@ import { usePathname } from "next/navigation"
 import { createClient } from "@supabase/supabase-js"
 
 // --- Supabase 클라이언트 설정 ---
-// 환경변수가 없을 경우를 대비해 null 병합 연산자 사용
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co"
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder"
 const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 // --- 주소 변환 유틸리티 ---
@@ -201,6 +200,12 @@ const streetTricks: Trick[] = [
 
 const categories = ["기초", "알리", "샤빗", "회전", "슬라이드", "그라인드", "킥플립", "힐플립", "널리", "스위치"];
 
+const navigationTabs = [
+  { name: "RAMP", href: "/ramp" },
+  { name: "STREET", href: "/street" },
+  { name: "TRANSITION", href: "/transition" },
+];
+
 export default function StreetPage() {
   const pathname = usePathname();
   const [isMounted, setIsMounted] = useState(false);
@@ -208,9 +213,11 @@ export default function StreetPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   
+  // 데이터 상태
   const [trickDescriptions, setTrickDescriptions] = useState<Record<string, string>>({});
   const [trickVideos, setTrickVideos] = useState<Record<string, string[]>>({});
   
+  // 편집 상태
   const [currentDescription, setCurrentDescription] = useState("");
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [newVideoUrl, setNewVideoUrl] = useState("");
@@ -219,9 +226,11 @@ export default function StreetPage() {
   const [editingVideoUrl, setEditingVideoUrl] = useState("");
   const searchRef = useRef<HTMLDivElement>(null);
 
-  // 데이터 동기화 함수를 useEffect 밖으로 뺌
-  const fetchDataFromSupabase = async () => {
+  // Supabase 데이터 페칭
+  const fetchDataFromSupabase = useCallback(async () => {
     try {
+      if (supabaseUrl.includes("placeholder")) return;
+
       const { data, error } = await supabase.from("tricks_data").select("*");
       if (error) throw error;
       if (data) {
@@ -237,7 +246,7 @@ export default function StreetPage() {
     } catch (err) {
       console.error("Data fetch error:", err);
     }
-  };
+  }, []);
 
   useEffect(() => {
     setIsMounted(true);
@@ -248,9 +257,14 @@ export default function StreetPage() {
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [fetchDataFromSupabase]);
 
+  // Supabase 업데이트 함수
   const updateSupabase = async (name: string, id: string, desc: string, urls: string[]) => {
+    if (supabaseUrl.includes("placeholder")) {
+        console.error("Supabase URL is not configured.");
+        return;
+    }
     const { error } = await supabase.from("tricks_data").upsert(
       { trick_id: id, trick_name: name, description: desc, video_urls: urls },
       { onConflict: "trick_id" }
@@ -272,11 +286,12 @@ export default function StreetPage() {
   if (!isMounted) return null;
 
   const jumpToVideoTime = (videoNum: number, timeStr: string) => {
-    if (typeof window === "undefined") return; // SSR 오류 방지
+    if (typeof window === "undefined") return;
 
     const [min, sec] = timeStr.replace(/[()]/g, "").split(":").map(Number);
     const totalSeconds = min * 60 + sec;
     const videoIndex = videoNum - 1;
+    
     if (selectedTrick) {
       const videos = trickVideos[selectedTrick.name] || [];
       const targetUrl = videos[videoIndex];
@@ -401,13 +416,20 @@ export default function StreetPage() {
             </div>
           </div>
           <nav className="flex gap-1 pb-px overflow-x-auto no-scrollbar">
-            {["RAMP", "STREET", "TRANSITION"].map((tab) => (
-              <Link key={tab} href={`/${tab.toLowerCase()}`} className="flex-1 min-w-[100px]">
-                <button className={`w-full py-3 text-xs font-black italic border-b-2 ${pathname === `/${tab.toLowerCase()}` ? "border-primary text-primary bg-primary/5" : "border-transparent text-muted-foreground"}`}>
-                  {tab}
-                </button>
-              </Link>
-            ))}
+            {navigationTabs.map((tab) => {
+              const isActive = pathname === tab.href;
+              return (
+                <Link key={tab.name} href={tab.href} className="flex-1 min-w-[100px] max-w-[200px]">
+                  <button className={`w-full py-3 text-xs font-black italic transition-all border-b-2 ${
+                      isActive 
+                        ? "border-primary text-primary bg-primary/5 shadow-[inset_0_-2px_0_0_rgba(var(--primary),1)]" 
+                        : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    }`}>
+                    {tab.name}
+                  </button>
+                </Link>
+              );
+            })}
           </nav>
         </div>
       </header>
@@ -419,13 +441,13 @@ export default function StreetPage() {
         </div>
         <div className="grid gap-8 lg:grid-cols-2">
           {categories.map((cat) => (
-            <section key={cat} className="rounded-2xl border bg-card p-6 shadow-sm">
+            <section key={cat} className="rounded-2xl border bg-card p-6 shadow-sm hover:shadow-md transition-shadow">
               <h3 className="mb-4 flex items-center gap-2 text-xl font-bold text-primary italic uppercase">
                 <span className="h-1 w-6 bg-primary rounded-full" /> {cat}
               </h3>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {streetTricks.filter((t) => t.category === cat).map((t) => (
-                  <Button key={t.id} variant="outline" className="h-auto min-h-[52px] justify-start text-left text-[11px] leading-tight whitespace-pre-wrap" onClick={() => setSelectedTrick(t)}>
+                  <Button key={t.id} variant="outline" className="h-auto min-h-[52px] justify-start text-left text-[11px] leading-tight whitespace-pre-wrap hover:border-primary/50 hover:bg-primary/5 transition-all" onClick={() => setSelectedTrick(t)}>
                     {t.name}
                   </Button>
                 ))}
@@ -436,9 +458,9 @@ export default function StreetPage() {
       </main>
 
       <Dialog open={!!selectedTrick} onOpenChange={() => setSelectedTrick(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto scrollbar-thin">
           <DialogHeader>
-            <div className="text-[10px] font-bold text-primary uppercase">{selectedTrick?.category}</div>
+            <div className="text-[10px] font-bold text-primary uppercase tracking-widest opacity-70">{selectedTrick?.category}</div>
             <DialogTitle className="text-2xl font-black italic">{selectedTrick?.name.replace('\n', ' ')}</DialogTitle>
           </DialogHeader>
 
@@ -456,18 +478,18 @@ export default function StreetPage() {
                         {url.includes("instagram") ? "Instagram" : "Youtube"} VIDEO #{i+1}
                       </div>
                       <div className="flex gap-1">
-                        <Button variant="ghost" size="sm" className="h-7 text-[10px]" onClick={() => { setEditingVideoIdx(i); setEditingVideoUrl(url); }}><Edit2 className="size-3 mr-1"/>수정</Button>
-                        <Button variant="ghost" size="sm" className="h-7 text-[10px] text-destructive" onClick={() => deleteVideo(i)}><Trash2 className="size-3 mr-1"/>삭제</Button>
+                        <Button variant="ghost" size="sm" className="h-7 px-2 text-[10px]" onClick={() => { setEditingVideoIdx(i); setEditingVideoUrl(url); }}><Edit2 className="size-3 mr-1"/>수정</Button>
+                        <Button variant="ghost" size="sm" className="h-7 px-2 text-[10px] text-destructive hover:bg-destructive/10" onClick={() => deleteVideo(i)}><Trash2 className="size-3 mr-1"/>삭제</Button>
                       </div>
                     </div>
                     {editingVideoIdx === i ? (
                       <div className="flex gap-2 bg-muted p-3 rounded-lg">
                         <Input className="h-9 text-sm" value={editingVideoUrl} onChange={(e) => setEditingVideoUrl(e.target.value)}/>
-                        <Button size="sm" onClick={() => saveEditVideo(i)}><Check className="size-4"/></Button>
-                        <Button size="sm" variant="ghost" onClick={() => setEditingVideoIdx(null)}><X className="size-4"/></Button>
+                        <Button size="sm" className="h-9 px-2" onClick={() => saveEditVideo(i)}><Check className="size-4"/></Button>
+                        <Button size="sm" variant="ghost" className="h-9 px-2" onClick={() => setEditingVideoIdx(null)}><X className="size-4"/></Button>
                       </div>
                     ) : (
-                      <div className="relative w-full overflow-hidden rounded-xl bg-black" style={{ paddingTop: url.includes("instagram") ? "125%" : "56.25%" }}>
+                      <div className="relative w-full overflow-hidden rounded-xl bg-black shadow-lg" style={{ paddingTop: url.includes("instagram") ? "125%" : "56.25%" }}>
                         <iframe src={url} className="absolute top-0 left-0 w-full h-full" allowFullScreen />
                       </div>
                     )}
@@ -486,7 +508,7 @@ export default function StreetPage() {
                   </div>
                 </div>
               ) : (
-                <Button variant="outline" className="w-full border-dashed py-8 bg-muted/5" onClick={() => setIsAddingVideo(true)}>
+                <Button variant="outline" className="w-full border-dashed py-8 bg-muted/5 hover:bg-muted/10 transition-colors" onClick={() => setIsAddingVideo(true)}>
                   <Plus className="mr-2 size-4"/>학습 영상 추가
                 </Button>
               )}
@@ -500,10 +522,10 @@ export default function StreetPage() {
                 </Button>
               </div>
               {isEditingDescription ? (
-                <Textarea value={currentDescription} onChange={(e) => setCurrentDescription(e.target.value)} className="min-h-[140px] text-sm p-4" placeholder="예: 영상1(00:20) 처럼 작성하면 타임라인 링크가 활성화됩니다." />
+                <Textarea value={currentDescription} onChange={(e) => setCurrentDescription(e.target.value)} className="min-h-[140px] bg-muted/30 border-none resize-none focus-visible:ring-1 text-sm p-4" placeholder="예: 영상1(00:20) 처럼 작성하면 타임라인 링크가 활성화됩니다." />
               ) : (
-                <div className="p-4 rounded-md bg-muted/30 text-sm min-h-[80px] leading-relaxed">
-                  {currentDescription ? renderDescriptionWithLinks(currentDescription) : <span className="text-muted-foreground italic text-xs">기록을 남겨보세요.</span>}
+                <div className="p-4 rounded-md bg-muted/30 text-sm min-h-[80px] border border-transparent leading-relaxed">
+                  {currentDescription ? renderDescriptionWithLinks(currentDescription) : <span className="text-muted-foreground italic text-xs">아직 등록된 팁이 없습니다. 본인만의 노하우를 기록해보세요.</span>}
                 </div>
               )}
             </div>
