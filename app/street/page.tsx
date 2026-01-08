@@ -8,14 +8,18 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Textarea } from "@/components/ui/textarea"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { createClient } from "@supabase/supabase-js"
 
-// --- 주소 변환 및 시간 파라미터 처리 유틸리티 ---
+// --- Supabase 클라이언트 설정 ---
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
+const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+// --- 주소 변환 유틸리티 ---
 const convertToEmbedUrl = (url: string, startTime?: number) => {
   if (!url) return "";
   try {
     const start = startTime !== undefined ? startTime : 0;
-    
-    // 유튜브 처리
     if (url.includes("youtube.com") || url.includes("youtu.be")) {
       let videoId = "";
       if (url.includes("youtube.com/embed/")) {
@@ -28,19 +32,13 @@ const convertToEmbedUrl = (url: string, startTime?: number) => {
         const urlObj = new URL(url);
         videoId = urlObj.searchParams.get("v") || "";
       }
-
-      if (videoId) {
-        return `https://www.youtube.com/embed/${videoId}?start=${start}&autoplay=1`;
-      }
+      if (videoId) return `https://www.youtube.com/embed/${videoId}?start=${start}&autoplay=1`;
     }
-
-    // 인스타그램 처리
     if (url.includes("instagram.com")) {
       let baseUrl = url.split("?")[0];
       if (baseUrl.endsWith("/")) baseUrl = baseUrl.slice(0, -1);
       return `${baseUrl}/embed`;
     }
-
     return url;
   } catch (e) {
     return url;
@@ -202,34 +200,29 @@ const streetTricks: Trick[] = [
 
 const categories = ["기초", "알리", "샤빗", "회전", "슬라이드", "그라인드", "킥플립", "힐플립", "널리", "스위치"];
 
-const navigationTabs = [
-  { name: "RAMP", href: "/ramp" },
-  { name: "STREET", href: "/street" },
-  { name: "TRANSITION", href: "/transition" },
-];
-
 export default function StreetPage() {
   const pathname = usePathname();
   const [isMounted, setIsMounted] = useState(false);
   const [selectedTrick, setSelectedTrick] = useState<Trick | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  
+  // --- Supabase 연동 상태 ---
   const [trickDescriptions, setTrickDescriptions] = useState<Record<string, string>>({});
+  const [trickVideos, setTrickVideos] = useState<Record<string, string[]>>({});
+  
   const [currentDescription, setCurrentDescription] = useState("");
   const [isEditingDescription, setIsEditingDescription] = useState(false);
-  const [trickVideos, setTrickVideos] = useState<Record<string, string[]>>({});
   const [newVideoUrl, setNewVideoUrl] = useState("");
   const [isAddingVideo, setIsAddingVideo] = useState(false);
   const [editingVideoIdx, setEditingVideoIdx] = useState<number | null>(null);
   const [editingVideoUrl, setEditingVideoUrl] = useState("");
   const searchRef = useRef<HTMLDivElement>(null);
 
+  // 1. 초기 데이터 로드 (Supabase에서 가져오기)
   useEffect(() => {
     setIsMounted(true);
-    const savedDesc = localStorage.getItem("skateflow-street-desc");
-    if (savedDesc) setTrickDescriptions(JSON.parse(savedDesc));
-    const savedVideos = localStorage.getItem("skateflow-street-videos");
-    if (savedVideos) setTrickVideos(JSON.parse(savedVideos));
+    fetchDataFromSupabase();
 
     const handleClickOutside = (e: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) setIsSearchFocused(false);
@@ -237,6 +230,34 @@ export default function StreetPage() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const fetchDataFromSupabase = async () => {
+    const { data, error } = await supabase.from("tricks_data").select("*");
+    if (error) {
+      console.error("데이터 로드 실패:", error);
+      return;
+    }
+    if (data) {
+      const descMap: Record<string, string> = {};
+      const videoMap: Record<string, string[]> = {};
+      data.forEach((row) => {
+        descMap[row.trick_name] = row.description;
+        videoMap[row.trick_name] = row.video_urls || [];
+      });
+      setTrickDescriptions(descMap);
+      setTrickVideos(videoMap);
+    }
+  };
+
+  // 2. 공통 업서트(Upsert) 함수 (DB에 즉시 저장)
+  const updateSupabase = async (name: string, id: string, desc: string, urls: string[]) => {
+    const { error } = await supabase.from("tricks_data").upsert(
+      { trick_id: id, trick_name: name, description: desc, video_urls: urls },
+      { onConflict: "trick_id" }
+    );
+    if (error) console.error("저장 실패:", error);
+    else fetchDataFromSupabase(); // 최신 데이터로 동기화
+  };
 
   useEffect(() => {
     if (selectedTrick) {
@@ -250,15 +271,14 @@ export default function StreetPage() {
 
   if (!isMounted) return null;
 
+  // --- 비디오 타임라인 점프 ---
   const jumpToVideoTime = (videoNum: number, timeStr: string) => {
     const [min, sec] = timeStr.replace(/[()]/g, "").split(":").map(Number);
     const totalSeconds = min * 60 + sec;
     const videoIndex = videoNum - 1;
-    
     if (selectedTrick) {
       const videos = trickVideos[selectedTrick.name] || [];
       const targetUrl = videos[videoIndex];
-      
       if (targetUrl) {
         if (targetUrl.includes("instagram.com")) {
           let cleanUrl = targetUrl.replace("/embed", "").split("?")[0];
@@ -273,11 +293,11 @@ export default function StreetPage() {
     }
   };
 
+  // --- 렌더링: 팁 내 링크 활성화 ---
   const renderDescriptionWithLinks = (text: string) => {
     const combinedPattern = /영상(\d+)\((\d{1,2}:\d{2})\)/g;
     const parts = text.split(combinedPattern);
     const elements = [];
-
     for (let i = 0; i < parts.length; i += 3) {
       elements.push(<span key={`text-${i}`}>{parts[i]}</span>);
       if (parts[i + 1] && parts[i + 2]) {
@@ -285,7 +305,6 @@ export default function StreetPage() {
         const timeStr = parts[i + 2];
         const videoUrl = trickVideos[selectedTrick?.name || ""]?.[videoNum - 1] || "";
         const isInstagram = videoUrl.includes("instagram");
-
         elements.push(
           <button
             key={`btn-${i}`}
@@ -303,24 +322,15 @@ export default function StreetPage() {
     return <div className="whitespace-pre-wrap leading-relaxed">{elements}</div>;
   };
 
-  const searchResults = searchQuery.trim() === "" 
-    ? [] 
-    : streetTricks.filter(t => 
-        t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.category.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-
-  const handleTrickClick = (trick: Trick) => {
-    setSelectedTrick(trick);
-    setSearchQuery("");
-    setIsSearchFocused(false);
-  };
-
+  // --- 데이터 수정 핸들러 ---
   const saveDescription = () => {
     if (selectedTrick) {
-      const updated = { ...trickDescriptions, [selectedTrick.name]: currentDescription };
-      setTrickDescriptions(updated);
-      localStorage.setItem("skateflow-street-desc", JSON.stringify(updated));
+      updateSupabase(
+        selectedTrick.name,
+        selectedTrick.id,
+        currentDescription,
+        trickVideos[selectedTrick.name] || []
+      );
       setIsEditingDescription(false);
     }
   };
@@ -328,40 +338,51 @@ export default function StreetPage() {
   const addVideo = () => {
     if (selectedTrick && newVideoUrl.trim()) {
       const embeddedUrl = convertToEmbedUrl(newVideoUrl.trim());
-      const current = trickVideos[selectedTrick.name] || [];
-      const updated = { ...trickVideos, [selectedTrick.name]: [...current, embeddedUrl] };
-      setTrickVideos(updated);
-      localStorage.setItem("skateflow-street-videos", JSON.stringify(updated));
+      const currentUrls = [...(trickVideos[selectedTrick.name] || []), embeddedUrl];
+      updateSupabase(
+        selectedTrick.name,
+        selectedTrick.id,
+        trickDescriptions[selectedTrick.name] || "",
+        currentUrls
+      );
       setNewVideoUrl("");
       setIsAddingVideo(false);
     }
   };
 
-  const startEditVideo = (idx: number, url: string) => {
-    setEditingVideoIdx(idx);
-    setEditingVideoUrl(url);
-  };
-
   const saveEditVideo = (idx: number) => {
     if (selectedTrick && editingVideoUrl.trim()) {
       const embedUrl = convertToEmbedUrl(editingVideoUrl.trim());
-      const current = [...(trickVideos[selectedTrick.name] || [])];
-      current[idx] = embedUrl;
-      const updated = { ...trickVideos, [selectedTrick.name]: current };
-      setTrickVideos(updated);
-      localStorage.setItem("skateflow-street-videos", JSON.stringify(updated));
+      const currentUrls = [...(trickVideos[selectedTrick.name] || [])];
+      currentUrls[idx] = embedUrl;
+      updateSupabase(
+        selectedTrick.name,
+        selectedTrick.id,
+        trickDescriptions[selectedTrick.name] || "",
+        currentUrls
+      );
       setEditingVideoIdx(null);
     }
   };
 
   const deleteVideo = (idx: number) => {
     if (selectedTrick) {
-      const current = trickVideos[selectedTrick.name] || [];
-      const updated = { ...trickVideos, [selectedTrick.name]: current.filter((_, i) => i !== idx) };
-      setTrickVideos(updated);
-      localStorage.setItem("skateflow-street-videos", JSON.stringify(updated));
+      const currentUrls = (trickVideos[selectedTrick.name] || []).filter((_, i) => i !== idx);
+      updateSupabase(
+        selectedTrick.name,
+        selectedTrick.id,
+        trickDescriptions[selectedTrick.name] || "",
+        currentUrls
+      );
     }
   };
+
+  const searchResults = searchQuery.trim() === "" 
+    ? [] 
+    : streetTricks.filter(t => 
+        t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        t.category.toLowerCase().includes(searchQuery.toLowerCase())
+      );
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -371,9 +392,7 @@ export default function StreetPage() {
             <div className="flex items-center justify-between flex-1">
               <div className="flex items-center gap-4">
                 <Link href="/">
-                  <Button variant="ghost" size="icon">
-                    <ArrowLeft className="size-5" />
-                  </Button>
+                  <Button variant="ghost" size="icon"><ArrowLeft className="size-5" /></Button>
                 </Link>
                 <h1 className="font-mono text-2xl font-bold text-primary tracking-tighter">SkateFlow</h1>
               </div>
@@ -381,7 +400,6 @@ export default function StreetPage() {
                 <Button variant="ghost" size="icon"><User className="size-5" /></Button>
               </div>
             </div>
-
             <div className="relative flex-1 md:max-w-md" ref={searchRef}>
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input 
@@ -394,7 +412,7 @@ export default function StreetPage() {
               {isSearchFocused && searchResults.length > 0 && (
                 <div className="absolute top-full left-0 right-0 z-50 mt-2 max-h-[300px] overflow-y-auto rounded-md border bg-popover shadow-xl p-1">
                   {searchResults.map((t) => (
-                    <button key={t.id} onClick={() => handleTrickClick(t)} className="flex w-full flex-col p-2 hover:bg-accent rounded-sm text-left border-b last:border-none">
+                    <button key={t.id} onClick={() => { setSelectedTrick(t); setSearchQuery(""); setIsSearchFocused(false); }} className="flex w-full flex-col p-2 hover:bg-accent rounded-sm text-left border-b last:border-none">
                       <span className="text-sm font-bold">{t.name.replace('\n', ' ')}</span>
                       <span className="text-[10px] text-muted-foreground">{t.category}</span>
                     </button>
@@ -403,24 +421,14 @@ export default function StreetPage() {
               )}
             </div>
           </div>
-
           <nav className="flex gap-1 pb-px overflow-x-auto no-scrollbar">
-            {navigationTabs.map((tab) => {
-              const isActive = pathname === tab.href;
-              return (
-                <Link key={tab.name} href={tab.href} className="flex-1 min-w-[100px] max-w-[200px]">
-                  <button
-                    className={`w-full py-3 text-xs font-black italic transition-all border-b-2 ${
-                      isActive 
-                        ? "border-primary text-primary bg-primary/5 shadow-[inset_0_-2px_0_0_rgba(var(--primary),1)]" 
-                        : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                    }`}
-                  >
-                    {tab.name}
-                  </button>
-                </Link>
-              );
-            })}
+            {["RAMP", "STREET", "TRANSITION"].map((tab) => (
+              <Link key={tab} href={`/${tab.toLowerCase()}`} className="flex-1 min-w-[100px]">
+                <button className={`w-full py-3 text-xs font-black italic border-b-2 ${pathname === `/${tab.toLowerCase()}` ? "border-primary text-primary bg-primary/5" : "border-transparent text-muted-foreground"}`}>
+                  {tab}
+                </button>
+              </Link>
+            ))}
           </nav>
         </div>
       </header>
@@ -430,26 +438,18 @@ export default function StreetPage() {
           <h2 className="text-5xl font-black italic tracking-tighter text-primary">STREET</h2>
           <p className="text-muted-foreground font-mono uppercase text-xs">SKATEBOARD STREET SKILL LIBRARY</p>
         </div>
-
         <div className="grid gap-8 lg:grid-cols-2">
           {categories.map((cat) => (
-            <section key={cat} className="rounded-2xl border bg-card p-6 shadow-sm hover:shadow-md transition-shadow">
+            <section key={cat} className="rounded-2xl border bg-card p-6 shadow-sm">
               <h3 className="mb-4 flex items-center gap-2 text-xl font-bold text-primary italic uppercase">
                 <span className="h-1 w-6 bg-primary rounded-full" /> {cat}
               </h3>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {streetTricks
-                  .filter((t) => t.category === cat)
-                  .map((t) => (
-                    <Button
-                      key={t.id}
-                      variant="outline"
-                      className="h-auto min-h-[52px] justify-start text-left text-[11px] leading-tight whitespace-pre-wrap hover:border-primary/50 hover:bg-primary/5 transition-all"
-                      onClick={() => setSelectedTrick(t)}
-                    >
-                      {t.name}
-                    </Button>
-                  ))}
+                {streetTricks.filter((t) => t.category === cat).map((t) => (
+                  <Button key={t.id} variant="outline" className="h-auto min-h-[52px] justify-start text-left text-[11px] leading-tight whitespace-pre-wrap" onClick={() => setSelectedTrick(t)}>
+                    {t.name}
+                  </Button>
+                ))}
               </div>
             </section>
           ))}
@@ -457,39 +457,38 @@ export default function StreetPage() {
       </main>
 
       <Dialog open={!!selectedTrick} onOpenChange={() => setSelectedTrick(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto scrollbar-thin">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <div className="text-[10px] font-bold text-primary uppercase tracking-widest opacity-70">{selectedTrick?.category}</div>
+            <div className="text-[10px] font-bold text-primary uppercase">{selectedTrick?.category}</div>
             <DialogTitle className="text-2xl font-black italic">{selectedTrick?.name.replace('\n', ' ')}</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-6">
             <div className="space-y-8">
               {(trickVideos[selectedTrick?.name || ""] || []).length === 0 ? (
-                <div className="aspect-video flex flex-col gap-2 items-center justify-center border-2 border-dashed rounded-xl text-muted-foreground text-sm bg-muted/10">
-                  <Youtube className="size-8 opacity-20" />
-                  등록된 학습 영상이 없습니다.
+                <div className="aspect-video flex flex-col items-center justify-center border-2 border-dashed rounded-xl text-muted-foreground text-sm bg-muted/10">
+                  <Youtube className="size-8 opacity-20 mb-2" />등록된 학습 영상이 없습니다.
                 </div>
               ) : (
                 trickVideos[selectedTrick?.name || ""].map((url, i) => (
                   <div key={i} className="space-y-3 pb-6 border-b last:border-0">
                     <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2 text-[10px] font-bold opacity-50 uppercase tracking-widest">
+                      <div className="text-[10px] font-bold opacity-50 uppercase tracking-widest">
                         {url.includes("instagram") ? "Instagram" : "Youtube"} VIDEO #{i+1}
                       </div>
                       <div className="flex gap-1">
-                        <Button variant="ghost" size="sm" className="h-7 px-2 text-[10px]" onClick={() => startEditVideo(i, url)}><Edit2 className="size-3 mr-1"/>수정</Button>
-                        <Button variant="ghost" size="sm" className="h-7 px-2 text-[10px] text-destructive hover:bg-destructive/10" onClick={() => deleteVideo(i)}><Trash2 className="size-3 mr-1"/>삭제</Button>
+                        <Button variant="ghost" size="sm" className="h-7 text-[10px]" onClick={() => { setEditingVideoIdx(i); setEditingVideoUrl(url); }}><Edit2 className="size-3 mr-1"/>수정</Button>
+                        <Button variant="ghost" size="sm" className="h-7 text-[10px] text-destructive" onClick={() => deleteVideo(i)}><Trash2 className="size-3 mr-1"/>삭제</Button>
                       </div>
                     </div>
                     {editingVideoIdx === i ? (
                       <div className="flex gap-2 bg-muted p-3 rounded-lg">
                         <Input className="h-9 text-sm" value={editingVideoUrl} onChange={(e) => setEditingVideoUrl(e.target.value)}/>
-                        <Button size="sm" className="h-9 px-2" onClick={() => saveEditVideo(i)}><Check className="size-4"/></Button>
-                        <Button size="sm" variant="ghost" className="h-9 px-2" onClick={() => setEditingVideoIdx(null)}><X className="size-4"/></Button>
+                        <Button size="sm" onClick={() => saveEditVideo(i)}><Check className="size-4"/></Button>
+                        <Button size="sm" variant="ghost" onClick={() => setEditingVideoIdx(null)}><X className="size-4"/></Button>
                       </div>
                     ) : (
-                      <div className="relative w-full overflow-hidden rounded-xl bg-black shadow-lg" style={{ paddingTop: url.includes("instagram") ? "125%" : "56.25%" }}>
+                      <div className="relative w-full overflow-hidden rounded-xl bg-black" style={{ paddingTop: url.includes("instagram") ? "125%" : "56.25%" }}>
                         <iframe src={url} className="absolute top-0 left-0 w-full h-full" allowFullScreen />
                       </div>
                     )}
@@ -508,7 +507,7 @@ export default function StreetPage() {
                   </div>
                 </div>
               ) : (
-                <Button variant="outline" className="w-full border-dashed py-8 bg-muted/5 hover:bg-muted/10 transition-colors" onClick={() => setIsAddingVideo(true)}>
+                <Button variant="outline" className="w-full border-dashed py-8 bg-muted/5" onClick={() => setIsAddingVideo(true)}>
                   <Plus className="mr-2 size-4"/>학습 영상 추가
                 </Button>
               )}
@@ -522,15 +521,10 @@ export default function StreetPage() {
                 </Button>
               </div>
               {isEditingDescription ? (
-                <Textarea 
-                  value={currentDescription} 
-                  onChange={(e) => setCurrentDescription(e.target.value)} 
-                  className="min-h-[140px] bg-muted/30 border-none resize-none focus-visible:ring-1 text-sm p-4" 
-                  placeholder="예: 영상1(00:20) 처럼 작성하면 타임라인 링크가 활성화됩니다." 
-                />
+                <Textarea value={currentDescription} onChange={(e) => setCurrentDescription(e.target.value)} className="min-h-[140px] text-sm p-4" placeholder="예: 영상1(00:20) 처럼 작성하면 타임라인 링크가 활성화됩니다." />
               ) : (
-                <div className="p-4 rounded-md bg-muted/30 text-sm min-h-[80px] border border-transparent leading-relaxed">
-                  {currentDescription ? renderDescriptionWithLinks(currentDescription) : <span className="text-muted-foreground italic text-xs">아직 등록된 팁이 없습니다. 본인만의 노하우를 기록해보세요.</span>}
+                <div className="p-4 rounded-md bg-muted/30 text-sm min-h-[80px] leading-relaxed">
+                  {currentDescription ? renderDescriptionWithLinks(currentDescription) : <span className="text-muted-foreground italic text-xs">기록을 남겨보세요.</span>}
                 </div>
               )}
             </div>
