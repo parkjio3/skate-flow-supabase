@@ -1,6 +1,6 @@
 "use client"
 import { useState, useEffect, useRef } from "react"
-import { Search, User, ArrowLeft, Plus, Trash2, Instagram, Youtube, Edit2, Check, X, PlayCircle, ExternalLink, Upload, FileVideo } from "lucide-react"
+import { Search, User, ArrowLeft, Plus, Trash2, Instagram, Youtube, Edit2, Check, X, PlayCircle, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -8,17 +8,10 @@ import { Textarea } from "@/components/ui/textarea"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
-// --- Firebase 관련 추가 ---
-import { storage } from "@/lib/firebase"; 
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-
 const convertToEmbedUrl = (url: string, startTime?: number) => {
   if (!url) return "";
   try {
     const start = startTime !== undefined ? startTime : 0;
-    // Firebase URL, 로컬 Blob, 또는 public 폴더 경로는 변환 건너뛰기
-    if (url.includes("firebasestorage") || url.startsWith("blob:") || url.startsWith("/")) return url;
-
     if (url.includes("youtube.com") || url.includes("youtu.be")) {
       let videoId = "";
       if (url.includes("youtube.com/embed/")) {
@@ -77,10 +70,6 @@ export default function RampPage() {
   const [editingVideoIdx, setEditingVideoIdx] = useState<number | null>(null)
   const [editingVideoUrl, setEditingVideoUrl] = useState("")
   const [isSearchFocused, setIsSearchFocused] = useState(false)
-  
-  // --- 추가된 상태 ---
-  const [isUploading, setIsUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const searchRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -100,33 +89,6 @@ export default function RampPage() {
     }
   }, [selectedTrick, trickDescriptions])
 
-  // Firebase 업로드 핸들러
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !selectedTrick) return;
-
-    try {
-      setIsUploading(true);
-      // Firebase Storage에 업로드 (경로: videos/기술이름/시간_파일명)
-      const storageRef = ref(storage, `videos/${selectedTrick.name}/${Date.now()}_${file.name}`);
-      const snapshot = await uploadBytes(storageRef, file);
-      const downloadURL = await getDownloadURL(snapshot.ref);
-
-      const current = trickVideos[selectedTrick.name] || [];
-      const updated = { ...trickVideos, [selectedTrick.name]: [...current, downloadURL] };
-      
-      setTrickVideos(updated);
-      localStorage.setItem("skateflow-ramp-videos", JSON.stringify(updated));
-      setIsAddingVideo(false);
-    } catch (error) {
-      console.error("Upload error:", error);
-      alert("업로드에 실패했습니다.");
-    } finally {
-      setIsUploading(false);
-      e.target.value = "";
-    }
-  };
-
   const jumpToVideoTime = (videoNum: number, timeStr: string) => {
     const [min, sec] = timeStr.replace(/[()]/g, "").split(":").map(Number);
     const totalSeconds = min * 60 + sec;
@@ -139,10 +101,6 @@ export default function RampPage() {
           let cleanUrl = targetUrl.replace("/embed", "").split("?")[0];
           if (cleanUrl.endsWith("/")) cleanUrl = cleanUrl.slice(0, -1);
           window.open(`${cleanUrl}/?t=${totalSeconds}s`, "_blank");
-        } else if (targetUrl.includes("firebasestorage") || targetUrl.includes(".mp4") || targetUrl.startsWith("blob:")) {
-          // 비디오 태그를 찾아 현재 시간을 변경
-          const videoElement = document.querySelectorAll('video')[videoIndex];
-          if (videoElement) videoElement.currentTime = totalSeconds;
         } else {
           const updatedVideos = [...videos];
           updatedVideos[videoIndex] = convertToEmbedUrl(targetUrl, totalSeconds);
@@ -150,26 +108,6 @@ export default function RampPage() {
         }
       }
     }
-  };
-
-  const renderVideoPlayer = (url: string) => {
-    const isDirectVideo = url.includes("firebasestorage") || url.startsWith("blob:") || url.includes(".mp4") || url.startsWith("/");
-    const isInstagram = url.includes("instagram.com");
-
-    if (isDirectVideo) {
-      return (
-        <div className="relative w-full rounded-xl bg-black shadow-lg overflow-hidden">
-          <video src={url} controls playsInline className="w-full aspect-video" />
-        </div>
-      );
-    }
-
-    return (
-      <div className="relative w-full overflow-hidden rounded-xl bg-black shadow-lg" 
-           style={{ paddingTop: isInstagram ? "125%" : "56.25%" }}>
-        <iframe src={url} className="absolute top-0 left-0 w-full h-full" allowFullScreen />
-      </div>
-    );
   };
 
   const renderDescriptionWithLinks = (text: string) => {
@@ -183,12 +121,8 @@ export default function RampPage() {
         const timeStr = parts[i + 2];
         const videoUrl = trickVideos[selectedTrick?.name || ""]?.[videoNum - 1] || "";
         const isInstagram = videoUrl.includes("instagram");
-        const isDirect = videoUrl.includes("firebasestorage") || videoUrl.includes(".mp4") || videoUrl.startsWith("/");
-        
         elements.push(
-          <button key={`btn-${i}`} onClick={() => jumpToVideoTime(videoNum, timeStr)} 
-            className={`font-bold hover:underline inline-flex items-center gap-0.5 mx-0.5 px-1 rounded transition-colors 
-            ${isInstagram ? "text-pink-600 bg-pink-50" : isDirect ? "text-blue-600 bg-blue-50" : "text-primary bg-primary/5"}`}>
+          <button key={`btn-${i}`} onClick={() => jumpToVideoTime(videoNum, timeStr)} className={`font-bold hover:underline inline-flex items-center gap-0.5 mx-0.5 px-1 rounded transition-colors ${isInstagram ? "text-pink-600 bg-pink-50" : "text-primary bg-primary/5"}`}>
             {isInstagram ? <ExternalLink className="size-3" /> : <PlayCircle className="size-3" />}
             영상{videoNum}({timeStr})
           </button>
@@ -304,17 +238,12 @@ export default function RampPage() {
           <div className="space-y-6">
             <div className="space-y-8">
               {(trickVideos[selectedTrick?.name || ""] || []).length === 0 ? (
-                <div className="aspect-video flex flex-col gap-2 items-center justify-center border-2 border-dashed rounded-xl text-muted-foreground text-sm bg-muted/10">
-                  <FileVideo className="size-8 opacity-20" />영상 파일 업로드 또는 주소를 추가해주세요.
-                </div>
+                <div className="aspect-video flex flex-col gap-2 items-center justify-center border-2 border-dashed rounded-xl text-muted-foreground text-sm bg-muted/10"><Youtube className="size-8 opacity-20" />영상 주소를 추가해주세요.</div>
               ) : (
                 trickVideos[selectedTrick?.name || ""].map((url, i) => (
                   <div key={i} className="space-y-3 pb-6 border-b last:border-0">
                     <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2 text-[10px] font-bold opacity-50 uppercase tracking-widest">
-                        {url.includes("firebasestorage") ? <Upload className="size-3"/> : url.includes("instagram") ? <Instagram className="size-3"/> : <Youtube className="size-3"/>} 
-                        {url.includes("firebasestorage") ? "Uploaded Video" : "Web Video"} #{i+1}
-                      </div>
+                      <div className="flex items-center gap-2 text-[10px] font-bold opacity-50 uppercase tracking-widest">{url.includes("instagram") ? <Instagram className="size-3"/> : <Youtube className="size-3"/>} VIDEO #{i+1}</div>
                       <div className="flex gap-1">
                         <Button variant="ghost" size="sm" className="h-7 px-2 text-[10px]" onClick={() => startEditVideo(i, url)}><Edit2 className="size-3 mr-1"/>수정</Button>
                         <Button variant="ghost" size="sm" className="h-7 px-2 text-[10px] text-destructive hover:bg-destructive/10" onClick={() => deleteVideo(i)}><Trash2 className="size-3 mr-1"/>삭제</Button>
@@ -323,7 +252,7 @@ export default function RampPage() {
                     {editingVideoIdx === i ? (
                       <div className="flex gap-2 bg-muted p-3 rounded-lg"><Input className="h-9 text-sm" value={editingVideoUrl} onChange={(e) => setEditingVideoUrl(e.target.value)}/><Button size="sm" className="h-9 px-2" onClick={() => saveEditVideo(i)}><Check className="size-4"/></Button><Button size="sm" variant="ghost" className="h-9 px-2" onClick={() => setEditingVideoIdx(null)}><X className="size-4"/></Button></div>
                     ) : (
-                      renderVideoPlayer(url)
+                      <div className="relative w-full overflow-hidden rounded-xl bg-black shadow-lg" style={{ paddingTop: url.includes("instagram") ? "125%" : "56.25%" }}><iframe src={url} className="absolute top-0 left-0 w-full h-full" allowFullScreen /></div>
                     )}
                   </div>
                 ))
@@ -331,21 +260,9 @@ export default function RampPage() {
             </div>
             <div className="pt-4 border-t">
               {isAddingVideo ? (
-                <div className="flex flex-col gap-3 p-4 bg-muted/20 rounded-xl">
-                  <Input placeholder="유튜브 또는 인스타그램 주소 입력" value={newVideoUrl} onChange={(e) => setNewVideoUrl(e.target.value)} />
-                  <div className="flex gap-2">
-                    <input type="file" accept="video/*" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
-                    <Button variant="outline" className="flex-1 bg-background" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
-                      {isUploading ? "업로드 중..." : <><Upload className="mr-2 size-4" /> 파일 업로드</>}
-                    </Button>
-                    <Button className="flex-1" onClick={addVideo} disabled={!newVideoUrl.trim()}>URL 등록</Button>
-                  </div>
-                  <Button variant="ghost" size="sm" onClick={() => setIsAddingVideo(false)}>취소</Button>
-                </div>
+                <div className="flex flex-col gap-2"><Input placeholder="유튜브 또는 인스타그램 주소" value={newVideoUrl} onChange={(e) => setNewVideoUrl(e.target.value)} /><div className="flex gap-2 justify-end"><Button variant="ghost" size="sm" onClick={() => setIsAddingVideo(false)}>취소</Button><Button size="sm" onClick={addVideo}>등록</Button></div></div>
               ) : (
-                <Button variant="outline" className="w-full border-dashed py-8 bg-muted/5 hover:bg-muted/10" onClick={() => setIsAddingVideo(true)}>
-                  <Plus className="mr-2 size-4"/>새 영상 추가 (파일/URL)
-                </Button>
+                <Button variant="outline" className="w-full border-dashed py-8 bg-muted/5" onClick={() => setIsAddingVideo(true)}><Plus className="mr-2 size-4"/>새 영상 추가</Button>
               )}
             </div>
             <div className="space-y-2 border-t pt-4">
