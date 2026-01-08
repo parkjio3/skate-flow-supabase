@@ -1,55 +1,71 @@
-/* Tailwind CSS v3 표준 선언 방식 (가장 안정적) */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Tailwind 전용 선언(@import, @tailwind, @theme)을 모두 제거했습니다. */
 
 :root {
-  /* Dark skateboarding theme with electric blue accent */
-  --background: 264 12% 12%; /* oklch를 RGB/HSL 기반으로 해석 */
-  --foreground: 264 1% 98%;
-  --card: 264 1.5% 16%;
-  --card-foreground: 264 1% 98%;
-  --popover: 264 1.5% 14%;
-  --popover-foreground: 264 1% 98%;
-  --primary: 264 24% 65%;
-  --primary-foreground: 264 1% 98%;
-  --secondary: 264 2% 22%;
-  --secondary-foreground: 264 1% 98%;
-  --muted: 264 2% 22%;
-  --muted-foreground: 264 1.5% 65%;
-  --accent: 264 2% 24%;
-  --accent-foreground: 264 1% 98%;
-  --destructive: 27 24.5% 57.7%;
-  --destructive-foreground: 264 1% 98%;
-  --border: 264 2% 24%;
-  --input: 264 2% 24%;
-  --ring: 264 24% 65%;
+  /* Dark skateboarding theme colors */
+  /* oklch를 지원하지 않는 브라우저를 위해 일반 색상값으로 변환하여 유지합니다. */
+  --background: #1a1b1e;
+  --foreground: #f8f9fa;
+  --card: #25262b;
+  --card-foreground: #f8f9fa;
+  --popover: #212226;
+  --popover-foreground: #f8f9fa;
+  --primary: #4d79ff; /* Electric blue accent */
+  --primary-foreground: #ffffff;
+  --secondary: #2c2e33;
+  --secondary-foreground: #f8f9fa;
+  --muted: #2c2e33;
+  --muted-foreground: #adb5bd;
+  --accent: #343a40;
+  --accent-foreground: #f8f9fa;
+  --destructive: #fa5252;
+  --destructive-foreground: #ffffff;
+  --border: #373a40;
+  --input: #373a40;
+  --ring: #4d79ff;
   --radius: 0.75rem;
-
-  /* Sidebar */
-  --sidebar: 264 1.5% 16%;
-  --sidebar-foreground: 264 1% 98%;
-  --sidebar-primary: 264 24% 65%;
-  --sidebar-primary-foreground: 264 1% 98%;
-  --sidebar-accent: 264 2% 22%;
-  --sidebar-accent-foreground: 264 1% 98%;
-  --sidebar-border: 264 2% 24%;
-  --sidebar-ring: 264 24% 65%;
+  
+  /* Sidebar colors */
+  --sidebar: #25262b;
+  --sidebar-foreground: #f8f9fa;
+  --sidebar-primary: #4d79ff;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #2c2e33;
+  --sidebar-accent-foreground: #f8f9fa;
+  --sidebar-border: #373a40;
+  --sidebar-ring: #4d79ff;
 }
 
-@layer base {
-  * {
-    @apply border-border;
-  }
-  body {
-    @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
-  }
+/* 기본 초기화 스타일 */
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+  /* 기존 @apply border-border 역할을 대신함 */
+  border-color: var(--border);
+  border-style: solid;
+  border-width: 0;
 }
 
-/* 유틸리티 클래스 추가 (필요한 경우) */
-@layer utilities {
-  .outline-ring-50 {
-    outline-color: color-mix(in srgb, var(--ring), transparent 50%);
-  }
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: "Geist", sans-serif;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
+
+/* 기존 @layer base 내의 스타일을 일반 CSS로 변환 */
+* {
+  border-color: var(--border);
+}
+
+*:focus-visible {
+  outline: 2px solid rgba(77, 121, 255, 0.5); /* outline-ring/50 대체 */
+}
+
+/* 유틸리티 클래스 (선택 사항: 기존 컴포넌트들이 이 클래스를 사용할 경우) */
+.bg-background { background-color: var(--background); }
+.text-foreground { color: var(--foreground); }
+.border-border { border-color: var(--border); }
+.rounded-lg { border-radius: var(--radius); }
