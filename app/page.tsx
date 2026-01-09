@@ -50,21 +50,21 @@ export default function HomePage() {
             onClick={() => handleProtectedNavigation("/ramp")}
             size="lg" className="h-24 w-full text-2xl font-bold shadow-lg transition-all hover:scale-105"
           >
-            램프
+            RAMP
           </Button>
 
           <Button 
             onClick={() => handleProtectedNavigation("/street")}
             size="lg" className="h-24 w-full text-2xl font-bold shadow-lg transition-all hover:scale-105"
           >
-            스트릿
+            STREET
           </Button>
 
           <Button 
             onClick={() => handleProtectedNavigation("/transition")}
             size="lg" className="h-24 w-full text-2xl font-bold shadow-lg transition-all hover:scale-105"
           >
-            트랜지션
+            TRANSITION
           </Button>
         </div>
       </div>
