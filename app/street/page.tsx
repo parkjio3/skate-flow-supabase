@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
-import { Search, User, ArrowLeft, Plus, Trash2, Instagram, Youtube, Edit2, Check, X, PlayCircle, ExternalLink } from "lucide-react"
+import { useState, useEffect, useRef, ChangeEvent } from "react"
+import { Search, User, ArrowLeft, Plus, Trash2, Instagram, Youtube, Edit2, Check, X, PlayCircle, ExternalLink, FileVideo, Upload, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -14,6 +14,10 @@ import { supabase } from '@/lib/supabase'
 // --- 주소 변환 및 시간 파라미터 처리 유틸리티 ---
 const convertToEmbedUrl = (url: string, startTime?: number) => {
   if (!url) return "";
+  // 직접 업로드된 Supabase Storage URL인 경우 변환 없이 반환
+  if (url.includes("supabase.co/storage/v1/object/public/")) {
+    return url;
+  }
   try {
     const start = startTime !== undefined ? startTime : 0;
     if (url.includes("youtube.com") || url.includes("youtu.be")) {
@@ -217,17 +221,17 @@ export default function StreetPage() {
   const [isAddingVideo, setIsAddingVideo] = useState(false);
   const [editingVideoIdx, setEditingVideoIdx] = useState<number | null>(null);
   const [editingVideoUrl, setEditingVideoUrl] = useState("");
+  const [isUploading, setIsUploading] = useState(false); // 업로드 상태 관리
   const searchRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null); // 파일 인풋 참조
 
   // 1. Supabase에서 데이터 불러오기 (초기 로드)
   const loadAllData = async () => {
-    // 설명 로드
     const { data: descData } = await supabase.from('street_descriptions').select('*');
     if (descData) {
       const descObj = descData.reduce((acc, cur) => ({ ...acc, [cur.trick_name]: cur.content }), {});
       setTrickDescriptions(descObj);
     }
-    // 영상 로드
     const { data: videoData } = await supabase.from('street_videos').select('*');
     if (videoData) {
       const videoObj = videoData.reduce((acc, cur) => ({ ...acc, [cur.trick_name]: cur.urls }), {});
@@ -266,10 +270,13 @@ export default function StreetPage() {
           let cleanUrl = targetUrl.replace("/embed", "").split("?")[0];
           if (cleanUrl.endsWith("/")) cleanUrl = cleanUrl.slice(0, -1);
           window.open(`${cleanUrl}/?t=${totalSeconds}s`, "_blank");
-        } else {
+        } else if (targetUrl.includes("youtube.com") || targetUrl.includes("youtu.be")) {
           const updatedVideos = [...videos];
           updatedVideos[videoIndex] = convertToEmbedUrl(targetUrl, totalSeconds);
           setTrickVideos({ ...trickVideos, [selectedTrick.name]: updatedVideos });
+        } else {
+          // 직접 업로드 영상은 시간 이동 로직이 별도 필요할 수 있으나, 우선 새창 열기나 알림 등으로 처리 가능
+          window.open(targetUrl, "_blank");
         }
       }
     }
@@ -286,9 +293,11 @@ export default function StreetPage() {
         const timeStr = parts[i + 2];
         const videoUrl = trickVideos[selectedTrick?.name || ""]?.[videoNum - 1] || "";
         const isInstagram = videoUrl.includes("instagram");
+        const isYoutube = videoUrl.includes("youtube") || videoUrl.includes("youtu.be");
+        
         elements.push(
-          <button key={`btn-${i}`} onClick={() => jumpToVideoTime(videoNum, timeStr)} className={`font-bold hover:underline inline-flex items-center gap-0.5 mx-0.5 px-1 rounded transition-colors ${isInstagram ? "text-pink-600 bg-pink-50" : "text-primary bg-primary/5"}`}>
-            {isInstagram ? <ExternalLink className="size-3" /> : <PlayCircle className="size-3" />}
+          <button key={`btn-${i}`} onClick={() => jumpToVideoTime(videoNum, timeStr)} className={`font-bold hover:underline inline-flex items-center gap-0.5 mx-0.5 px-1 rounded transition-colors ${isInstagram ? "text-pink-600 bg-pink-50" : isYoutube ? "text-primary bg-primary/5" : "text-blue-600 bg-blue-50"}`}>
+            {isInstagram ? <ExternalLink className="size-3" /> : isYoutube ? <PlayCircle className="size-3" /> : <FileVideo className="size-3" />}
             영상{videoNum}({timeStr})
           </button>
         );
@@ -297,13 +306,56 @@ export default function StreetPage() {
     return <div className="whitespace-pre-wrap leading-relaxed">{elements}</div>;
   };
 
-  // 2. 기술 설명 저장 (Supabase Upsert)
+  // 갤러리 영상 업로드 처리
+  const handleFileUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedTrick) return;
+
+    try {
+      setIsUploading(true);
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `street/${fileName}`;
+
+      // 1. Supabase Storage 업로드 (videos 버킷의 street 폴더)
+      const { data, error: uploadError } = await supabase.storage
+        .from('videos')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // 2. 공개 URL 가져오기
+      const { data: { publicUrl } } = supabase.storage
+        .from('videos')
+        .getPublicUrl(filePath);
+
+      // 3. DB에 URL 저장
+      const currentUrls = trickVideos[selectedTrick.name] || [];
+      const updatedUrls = [...currentUrls, publicUrl];
+
+      const { error: dbError } = await supabase
+        .from('street_videos')
+        .upsert({ trick_name: selectedTrick.name, urls: updatedUrls }, { onConflict: 'trick_name' });
+
+      if (dbError) throw dbError;
+
+      setTrickVideos(prev => ({ ...prev, [selectedTrick.name]: updatedUrls }));
+      setIsAddingVideo(false);
+      alert("영상이 성공적으로 업로드되었습니다.");
+    } catch (error: any) {
+      console.error(error);
+      alert("업로드 중 오류 발생: " + error.message);
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   const saveDescription = async () => {
     if (selectedTrick) {
       const { error } = await supabase
         .from('street_descriptions')
         .upsert({ trick_name: selectedTrick.name, content: currentDescription }, { onConflict: 'trick_name' });
-      
       if (!error) {
         setTrickDescriptions(prev => ({ ...prev, [selectedTrick.name]: currentDescription }));
         setIsEditingDescription(false);
@@ -311,17 +363,14 @@ export default function StreetPage() {
     }
   };
 
-  // 3. 영상 추가 (Supabase Upsert)
   const addVideo = async () => {
     if (selectedTrick && newVideoUrl.trim()) {
       const embedUrl = convertToEmbedUrl(newVideoUrl.trim());
       const currentUrls = trickVideos[selectedTrick.name] || [];
       const updatedUrls = [...currentUrls, embedUrl];
-
       const { error } = await supabase
         .from('street_videos')
         .upsert({ trick_name: selectedTrick.name, urls: updatedUrls }, { onConflict: 'trick_name' });
-
       if (!error) {
         setTrickVideos(prev => ({ ...prev, [selectedTrick.name]: updatedUrls }));
         setNewVideoUrl("");
@@ -330,7 +379,6 @@ export default function StreetPage() {
     }
   };
 
-  // 4. 영상 수정/삭제 통합 DB 반영
   const updateVideosInDb = async (trickName: string, urls: string[]) => {
     const { error } = await supabase
       .from('street_videos')
@@ -439,7 +487,10 @@ export default function StreetPage() {
                 trickVideos[selectedTrick?.name || ""].map((url, i) => (
                   <div key={i} className="space-y-3 pb-6 border-b last:border-0">
                     <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2 text-[10px] font-bold opacity-50 uppercase tracking-widest">{url.includes("instagram") ? "Instagram" : "Youtube"} VIDEO #{i+1}</div>
+                      <div className="flex items-center gap-2 text-[10px] font-bold opacity-50 uppercase tracking-widest">
+                        {url.includes("instagram") ? <Instagram className="size-3"/> : url.includes("youtube") || url.includes("youtu.be") ? <Youtube className="size-3"/> : <FileVideo className="size-3"/>}
+                        {url.includes("supabase.co") ? "UPLOADED" : "LINK"} VIDEO #{i+1}
+                      </div>
                       <div className="flex gap-1">
                         <Button variant="ghost" size="sm" className="h-7 px-2 text-[10px]" onClick={() => startEditVideo(i, url)}><Edit2 className="size-3 mr-1"/>수정</Button>
                         <Button variant="ghost" size="sm" className="h-7 px-2 text-[10px] text-destructive hover:bg-destructive/10" onClick={() => deleteVideo(i)}><Trash2 className="size-3 mr-1"/>삭제</Button>
@@ -448,19 +499,55 @@ export default function StreetPage() {
                     {editingVideoIdx === i ? (
                       <div className="flex gap-2 bg-muted p-3 rounded-lg"><Input className="h-9 text-sm" value={editingVideoUrl} onChange={(e) => setEditingVideoUrl(e.target.value)}/><Button size="sm" className="h-9 px-2" onClick={() => saveEditVideo(i)}><Check className="size-4"/></Button><Button size="sm" variant="ghost" className="h-9 px-2" onClick={() => setEditingVideoIdx(null)}><X className="size-4"/></Button></div>
                     ) : (
-                      <div className="relative w-full overflow-hidden rounded-xl bg-black shadow-lg" style={{ paddingTop: url.includes("instagram") ? "125%" : "56.25%" }}><iframe src={url} className="absolute top-0 left-0 w-full h-full" allowFullScreen /></div>
+                      <div className="relative w-full overflow-hidden rounded-xl bg-black shadow-lg" style={{ paddingTop: (url.includes("youtube") || url.includes("youtu.be")) ? "56.25%" : url.includes("instagram") ? "125%" : "56.25%" }}>
+                        {url.includes("youtube") || url.includes("instagram") || url.includes("youtu.be") ? (
+                          <iframe src={url} className="absolute top-0 left-0 w-full h-full" allowFullScreen />
+                        ) : (
+                          <video src={url} className="absolute top-0 left-0 w-full h-full" controls playsInline />
+                        )}
+                      </div>
                     )}
                   </div>
                 ))
               )}
             </div>
+            
             <div className="pt-4 border-t">
               {isAddingVideo ? (
-                <div className="flex flex-col gap-2"><Input placeholder="유튜브 또는 인스타그램 주소" value={newVideoUrl} onChange={(e) => setNewVideoUrl(e.target.value)} /><div className="flex gap-2 justify-end"><Button variant="ghost" size="sm" onClick={() => setIsAddingVideo(false)}>취소</Button><Button size="sm" onClick={addVideo}>영상 등록</Button></div></div>
+                <div className="flex flex-col gap-3">
+                  <div className="flex gap-2">
+                    <Input 
+                      placeholder="유튜브 또는 인스타그램 주소" 
+                      value={newVideoUrl} 
+                      onChange={(e) => setNewVideoUrl(e.target.value)} 
+                    />
+                    <input 
+                      type="file" 
+                      ref={fileInputRef} 
+                      className="hidden" 
+                      accept="video/*" 
+                      onChange={handleFileUpload}
+                    />
+                    <Button 
+                      variant="secondary" 
+                      className="shrink-0" 
+                      disabled={isUploading}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      {isUploading ? <Loader2 className="size-4 animate-spin"/> : <Upload className="size-4 mr-1"/>}
+                      {isUploading ? "업로드 중" : "업로드"}
+                    </Button>
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <Button variant="ghost" size="sm" onClick={() => setIsAddingVideo(false)}>취소</Button>
+                    <Button size="sm" onClick={addVideo} disabled={!newVideoUrl.trim()}>URL 등록</Button>
+                  </div>
+                </div>
               ) : (
-                <Button variant="outline" className="w-full border-dashed py-8 bg-muted/5 hover:bg-muted/10 transition-colors" onClick={() => setIsAddingVideo(true)}><Plus className="mr-2 size-4"/>학습 영상 추가</Button>
+                <Button variant="outline" className="w-full border-dashed py-8 bg-muted/5 hover:bg-muted/10 transition-colors" onClick={() => setIsAddingVideo(true)}><Plus className="mr-2 size-4"/>학습 영상 추가 (URL 또는 갤러리)</Button>
               )}
             </div>
+
             <div className="space-y-2 border-t pt-4">
               <div className="flex justify-between items-center mb-2"><span className="text-[10px] font-bold italic tracking-widest opacity-60 uppercase">Tips & Notes</span><Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => isEditingDescription ? saveDescription() : setIsEditingDescription(true)}>{isEditingDescription ? "저장" : "수정"}</Button></div>
               {isEditingDescription ? (
