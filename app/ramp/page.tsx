@@ -130,7 +130,7 @@ export default function RampPage() {
       const targetUrl = videos[videoIndex];
       if (!targetUrl) return;
 
-      // 공통: 해당 영상 컨테이너로 스크롤 이동 (유튜브, 인스타, 로컬 공통)
+      // 공통: 해당 영상 컨테이너로 스크롤 이동
       const containerElement = videoRefs.current[videoIndex];
       if (containerElement) {
         containerElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -148,15 +148,18 @@ export default function RampPage() {
         updatedVideos[videoIndex] = convertToEmbedUrl(targetUrl, totalSeconds);
         setTrickVideos({ ...trickVideos, [selectedTrick.name]: updatedVideos });
       } 
-      // 3. 로컬 업로드 영상 처리 (Supabase Storage 등)
-      else {
+      // 3. 로컬 업로드 영상 처리 (다운로드 문제 해결 핵심 코드)
+      else if (targetUrl.includes("supabase.co")) {
         const videoElement = nativeVideoRefs.current[videoIndex];
         if (videoElement) {
+          // window.open을 호출하는 대신 비디오 엘리먼트의 시간을 직접 조정합니다.
           videoElement.currentTime = totalSeconds;
           videoElement.play().catch(e => console.error("Auto-play failed:", e));
-        } else {
-          window.open(targetUrl, "_blank");
         }
+      }
+      // 기타 외부 링크
+      else {
+        window.open(targetUrl, "_blank");
       }
     }
   };
@@ -397,6 +400,7 @@ export default function RampPage() {
                             className="absolute top-0 left-0 w-full h-full" 
                             controls 
                             playsInline 
+                            preload="metadata"
                           />
                         )}
                       </div>
