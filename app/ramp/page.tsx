@@ -79,6 +79,11 @@ export default function RampPage() {
   const [isUploading, setIsUploading] = useState(false) 
   const searchRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  
+  // 비디오 태그 및 iframe 컨테이너를 통합 제어하기 위한 Ref 배열
+  const videoRefs = useRef<(HTMLDivElement | null)[]>([]);
+  // 실제 HTML5 video 요소에 접근하기 위한 Ref 배열
+  const nativeVideoRefs = useRef<(HTMLVideoElement | null)[]>([]);
 
   // 1. Supabase에서 데이터 불러오기 (초기 로드)
   const loadAllData = async () => {
@@ -105,7 +110,13 @@ export default function RampPage() {
   useEffect(() => {
     if (selectedTrick) {
       setCurrentDescription(trickDescriptions[selectedTrick.name] || "")
-      setIsEditingDescription(false); setNewVideoUrl(""); setIsAddingVideo(false); setEditingVideoIdx(null);
+      setIsEditingDescription(false); 
+      setNewVideoUrl(""); 
+      setIsAddingVideo(false); 
+      setEditingVideoIdx(null);
+      // 트릭이 바뀔 때 모든 참조 초기화
+      videoRefs.current = [];
+      nativeVideoRefs.current = [];
     }
   }, [selectedTrick, trickDescriptions])
 
@@ -113,20 +124,37 @@ export default function RampPage() {
     const [min, sec] = timeStr.replace(/[()]/g, "").split(":").map(Number);
     const totalSeconds = min * 60 + sec;
     const videoIndex = videoNum - 1;
+
     if (selectedTrick) {
       const videos = trickVideos[selectedTrick.name] || [];
       const targetUrl = videos[videoIndex];
-      if (targetUrl) {
-        if (targetUrl.includes("instagram.com")) {
-          let cleanUrl = targetUrl.replace("/embed", "").split("?")[0];
-          if (cleanUrl.endsWith("/")) cleanUrl = cleanUrl.slice(0, -1);
-          window.open(`${cleanUrl}/?t=${totalSeconds}s`, "_blank");
-        } else if (targetUrl.includes("youtube.com") || targetUrl.includes("youtu.be")) {
-          const updatedVideos = [...videos];
-          updatedVideos[videoIndex] = convertToEmbedUrl(targetUrl, totalSeconds);
-          setTrickVideos({ ...trickVideos, [selectedTrick.name]: updatedVideos });
+      if (!targetUrl) return;
+
+      // 공통: 해당 영상 컨테이너로 스크롤 이동 (유튜브, 인스타, 로컬 공통)
+      const containerElement = videoRefs.current[videoIndex];
+      if (containerElement) {
+        containerElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+
+      // 1. 인스타그램 처리
+      if (targetUrl.includes("instagram.com")) {
+        let cleanUrl = targetUrl.replace("/embed", "").split("?")[0];
+        if (cleanUrl.endsWith("/")) cleanUrl = cleanUrl.slice(0, -1);
+        window.open(`${cleanUrl}/?t=${totalSeconds}s`, "_blank");
+      } 
+      // 2. 유튜브 처리
+      else if (targetUrl.includes("youtube.com") || targetUrl.includes("youtu.be")) {
+        const updatedVideos = [...videos];
+        updatedVideos[videoIndex] = convertToEmbedUrl(targetUrl, totalSeconds);
+        setTrickVideos({ ...trickVideos, [selectedTrick.name]: updatedVideos });
+      } 
+      // 3. 로컬 업로드 영상 처리 (Supabase Storage 등)
+      else {
+        const videoElement = nativeVideoRefs.current[videoIndex];
+        if (videoElement) {
+          videoElement.currentTime = totalSeconds;
+          videoElement.play().catch(e => console.error("Auto-play failed:", e));
         } else {
-          // 로컬 영상은 새 탭에서 열어 원본을 확인하거나, 필요시 커스텀 플레이어 시간 로직 추가 가능
           window.open(targetUrl, "_blank");
         }
       }
@@ -161,7 +189,6 @@ export default function RampPage() {
     return <div className="whitespace-pre-wrap leading-relaxed">{elements}</div>;
   };
 
-  // 갤러리/파일 업로드 처리
   const handleFileUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedTrick) return;
@@ -170,21 +197,18 @@ export default function RampPage() {
       setIsUploading(true);
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-      const filePath = `ramp/${fileName}`; // ramp 폴더에 저장
+      const filePath = `ramp/${fileName}`;
 
-      // Supabase Storage 업로드
       const { data, error: uploadError } = await supabase.storage
         .from('videos')
         .upload(filePath, file);
 
       if (uploadError) throw uploadError;
 
-      // 공개 URL 생성
       const { data: { publicUrl } } = supabase.storage
         .from('videos')
         .getPublicUrl(filePath);
 
-      // DB 업데이트
       const currentUrls = trickVideos[selectedTrick.name] || [];
       const updatedUrls = [...currentUrls, publicUrl];
 
@@ -334,7 +358,13 @@ export default function RampPage() {
         </div>
       </main>
 
-      <Dialog open={!!selectedTrick} onOpenChange={() => setSelectedTrick(null)}>
+      <Dialog open={!!selectedTrick} onOpenChange={(open) => {
+        if (!open) {
+          setSelectedTrick(null);
+          videoRefs.current = [];
+          nativeVideoRefs.current = [];
+        }
+      }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto scrollbar-thin">
           <DialogHeader><DialogTitle className="text-2xl font-black italic">{selectedTrick?.name}</DialogTitle></DialogHeader>
           <div className="space-y-6">
@@ -343,7 +373,7 @@ export default function RampPage() {
                 <div className="aspect-video flex flex-col gap-2 items-center justify-center border-2 border-dashed rounded-xl text-muted-foreground text-sm bg-muted/10"><Youtube className="size-8 opacity-20" />영상을 추가해주세요 (URL 혹은 직접 업로드).</div>
               ) : (
                 trickVideos[selectedTrick?.name || ""].map((url, i) => (
-                  <div key={i} className="space-y-3 pb-6 border-b last:border-0">
+                  <div key={i} ref={(el) => (videoRefs.current[i] = el)} className="space-y-3 pb-6 border-b last:border-0 scroll-mt-6">
                     <div className="flex justify-between items-center">
                       <div className="flex items-center gap-2 text-[10px] font-bold opacity-50 uppercase tracking-widest">
                         {url.includes("instagram") ? <Instagram className="size-3"/> : url.includes("youtube") || url.includes("youtu.be") ? <Youtube className="size-3"/> : <FileVideo className="size-3"/>} 
@@ -361,7 +391,13 @@ export default function RampPage() {
                         {url.includes("youtube") || url.includes("instagram") || url.includes("youtu.be") ? (
                           <iframe src={url} className="absolute top-0 left-0 w-full h-full" allowFullScreen />
                         ) : (
-                          <video src={url} className="absolute top-0 left-0 w-full h-full" controls playsInline />
+                          <video 
+                            ref={(el) => (nativeVideoRefs.current[i] = el)}
+                            src={url} 
+                            className="absolute top-0 left-0 w-full h-full" 
+                            controls 
+                            playsInline 
+                          />
                         )}
                       </div>
                     )}
@@ -370,30 +406,13 @@ export default function RampPage() {
               )}
             </div>
 
-            {/* 영상 추가 섹션 */}
             <div className="pt-4 border-t">
               {isAddingVideo ? (
                 <div className="flex flex-col gap-3">
                   <div className="flex gap-2">
-                    <Input 
-                      placeholder="유튜브/인스타 주소" 
-                      value={newVideoUrl} 
-                      onChange={(e) => setNewVideoUrl(e.target.value)} 
-                    />
-                    {/* 숨겨진 파일 인풋 */}
-                    <input 
-                      type="file" 
-                      ref={fileInputRef}
-                      className="hidden" 
-                      accept="video/*" 
-                      onChange={handleFileUpload}
-                    />
-                    <Button 
-                      variant="secondary" 
-                      className="shrink-0"
-                      disabled={isUploading}
-                      onClick={() => fileInputRef.current?.click()}
-                    >
+                    <Input placeholder="유튜브/인스타 주소" value={newVideoUrl} onChange={(e) => setNewVideoUrl(e.target.value)} />
+                    <input type="file" ref={fileInputRef} className="hidden" accept="video/*" onChange={handleFileUpload} />
+                    <Button variant="secondary" className="shrink-0" disabled={isUploading} onClick={() => fileInputRef.current?.click()}>
                       {isUploading ? <Loader2 className="size-4 animate-spin"/> : <Upload className="size-4 mr-1"/>}
                       {isUploading ? "업로드 중" : "업로드"}
                     </Button>
