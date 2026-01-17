@@ -7,6 +7,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Textarea } from "@/components/ui/textarea"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+// Supabase 클라이언트 임포트
+import { supabase } from '@/lib/supabase'
 
 const convertToEmbedUrl = (url: string, startTime?: number) => {
   if (!url) return "";
@@ -72,11 +74,25 @@ export default function RampPage() {
   const [isSearchFocused, setIsSearchFocused] = useState(false)
   const searchRef = useRef<HTMLDivElement>(null)
 
+  // 1. Supabase에서 데이터 불러오기 (초기 로드)
+  const loadAllData = async () => {
+    // 기술 설명(Tips) 불러오기
+    const { data: descData } = await supabase.from('ramp_descriptions').select('*');
+    if (descData) {
+      const descObj = descData.reduce((acc, cur) => ({ ...acc, [cur.trick_name]: cur.content }), {});
+      setTrickDescriptions(descObj);
+    }
+
+    // 영상 리스트 불러오기
+    const { data: videoData } = await supabase.from('ramp_videos').select('*');
+    if (videoData) {
+      const videoObj = videoData.reduce((acc, cur) => ({ ...acc, [cur.trick_name]: cur.urls }), {});
+      setTrickVideos(videoObj);
+    }
+  };
+
   useEffect(() => {
-    const savedDesc = localStorage.getItem("skateflow-ramp-descriptions")
-    if (savedDesc) setTrickDescriptions(JSON.parse(savedDesc))
-    const savedVideos = localStorage.getItem("skateflow-ramp-videos")
-    if (savedVideos) setTrickVideos(JSON.parse(savedVideos))
+    loadAllData();
     const handleClickOutside = (e: MouseEvent) => { if (searchRef.current && !searchRef.current.contains(e.target as Node)) setIsSearchFocused(false) }
     document.addEventListener("mousedown", handleClickOutside)
     return () => document.removeEventListener("mousedown", handleClickOutside)
@@ -132,37 +148,68 @@ export default function RampPage() {
     return <div className="whitespace-pre-wrap leading-relaxed">{elements}</div>;
   };
 
-  const saveDescription = () => {
+  // 2. 기술 설명 저장 (Supabase Upsert)
+  const saveDescription = async () => {
     if (selectedTrick) {
-      const updated = { ...trickDescriptions, [selectedTrick.name]: currentDescription }
-      setTrickDescriptions(updated); localStorage.setItem("skateflow-ramp-descriptions", JSON.stringify(updated)); setIsEditingDescription(false)
+      const { error } = await supabase
+        .from('ramp_descriptions')
+        .upsert({ trick_name: selectedTrick.name, content: currentDescription }, { onConflict: 'trick_name' });
+      
+      if (!error) {
+        setTrickDescriptions(prev => ({ ...prev, [selectedTrick.name]: currentDescription }));
+        setIsEditingDescription(false);
+      }
     }
   }
 
-  const addVideo = () => {
+  // 3. 영상 추가 (Supabase Upsert)
+  const addVideo = async () => {
     if (selectedTrick && newVideoUrl.trim()) {
       const embedUrl = convertToEmbedUrl(newVideoUrl.trim());
-      const current = trickVideos[selectedTrick.name] || []
-      const updated = { ...trickVideos, [selectedTrick.name]: [...current, embedUrl] }
-      setTrickVideos(updated); localStorage.setItem("skateflow-ramp-videos", JSON.stringify(updated)); setNewVideoUrl(""); setIsAddingVideo(false)
+      const currentUrls = trickVideos[selectedTrick.name] || [];
+      const updatedUrls = [...currentUrls, embedUrl];
+
+      const { error } = await supabase
+        .from('ramp_videos')
+        .upsert({ trick_name: selectedTrick.name, urls: updatedUrls }, { onConflict: 'trick_name' });
+
+      if (!error) {
+        setTrickVideos(prev => ({ ...prev, [selectedTrick.name]: updatedUrls }));
+        setNewVideoUrl("");
+        setIsAddingVideo(false);
+      }
     }
   }
+
+  // 4. 영상 수정/삭제 통합 저장 함수
+  const updateVideosInDb = async (trickName: string, urls: string[]) => {
+    const { error } = await supabase
+      .from('ramp_videos')
+      .upsert({ trick_name: trickName, urls: urls }, { onConflict: 'trick_name' });
+    return !error;
+  };
 
   const startEditVideo = (idx: number, url: string) => { setEditingVideoIdx(idx); setEditingVideoUrl(url) }
-  const saveEditVideo = (idx: number) => {
+  
+  const saveEditVideo = async (idx: number) => {
     if (selectedTrick && editingVideoUrl.trim()) {
       const embedUrl = convertToEmbedUrl(editingVideoUrl.trim());
-      const current = [...(trickVideos[selectedTrick.name] || [])]
-      current[idx] = embedUrl; const updated = { ...trickVideos, [selectedTrick.name]: current }
-      setTrickVideos(updated); localStorage.setItem("skateflow-ramp-videos", JSON.stringify(updated)); setEditingVideoIdx(null)
+      const current = [...(trickVideos[selectedTrick.name] || [])];
+      current[idx] = embedUrl;
+      
+      if (await updateVideosInDb(selectedTrick.name, current)) {
+        setTrickVideos(prev => ({ ...prev, [selectedTrick.name]: current }));
+        setEditingVideoIdx(null);
+      }
     }
   }
 
-  const deleteVideo = (idx: number) => {
+  const deleteVideo = async (idx: number) => {
     if (selectedTrick) {
-      const current = trickVideos[selectedTrick.name] || []
-      const updated = { ...trickVideos, [selectedTrick.name]: current.filter((_, i) => i !== idx) }
-      setTrickVideos(updated); localStorage.setItem("skateflow-ramp-videos", JSON.stringify(updated))
+      const current = (trickVideos[selectedTrick.name] || []).filter((_, i) => i !== idx);
+      if (await updateVideosInDb(selectedTrick.name, current)) {
+        setTrickVideos(prev => ({ ...prev, [selectedTrick.name]: current }));
+      }
     }
   }
 
