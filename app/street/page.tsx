@@ -1,6 +1,7 @@
 "use client"
+
 import { useState, useEffect, useRef, ChangeEvent } from "react"
-import { Search, User, ArrowLeft, Plus, Trash2, Instagram, Youtube, Edit2, Check, X, PlayCircle, ExternalLink, FileVideo, Loader2, Upload } from "lucide-react"
+import { Search, User, ArrowLeft, Plus, Trash2, Instagram, Youtube, Edit2, Check, X, PlayCircle, ExternalLink, FileVideo, Upload, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -10,8 +11,10 @@ import { usePathname } from "next/navigation"
 // Supabase 클라이언트 임포트
 import { supabase } from '@/lib/supabase'
 
+// --- 주소 변환 및 시간 파라미터 처리 유틸리티 ---
 const convertToEmbedUrl = (url: string, startTime?: number) => {
   if (!url) return "";
+  // 직접 업로드된 Supabase Storage URL인 경우 변환 없이 반환
   if (url.includes("supabase.co/storage/v1/object/public/")) {
     return url;
   }
@@ -26,8 +29,8 @@ const convertToEmbedUrl = (url: string, startTime?: number) => {
       } else if (url.includes("youtu.be/")) {
         videoId = url.split("youtu.be/")[1].split("?")[0];
       } else {
-        const parsed = new URL(url);
-        videoId = parsed.searchParams.get("v") || "";
+        const urlObj = new URL(url);
+        videoId = urlObj.searchParams.get("v") || "";
       }
       if (videoId) return `https://www.youtube.com/embed/${videoId}?start=${start}&autoplay=1`;
     }
@@ -40,21 +43,164 @@ const convertToEmbedUrl = (url: string, startTime?: number) => {
   } catch (e) { return url; }
 };
 
-type RankLevel = { level: number; description: string; tricks: string[] }
-type RankCategory = { name: string; color: string; levels: RankLevel[] }
+type Trick = { id: string; category: string; name: string; videoUrl: string }
 
-const streetRanks: RankCategory[] = [
-  { name: "아이언", color: "from-stone-600 to-stone-800", levels: [{ level: 3, description: "기본 주행 및 푸시오프", tricks: ["푸시오프", "풋브레이크"] }, { level: 2, description: "보드 제어 기초", tricks: ["틱택", "엔드워크"] }, { level: 1, description: "기초 회전 기술", tricks: ["B/S 킥턴", "F/S 킥턴"] }] },
-  { name: "브론즈", color: "from-amber-600 to-amber-800", levels: [{ level: 3, description: "점프의 시작", tricks: ["힙업", "노즈업"] }, { level: 2, description: "알리 기초", tricks: ["알리 (제자리)", "알리 (주행)"] }, { level: 1, description: "장애물 극복", tricks: ["턱 오르기", "장애물 넘기"] }] },
-  { name: "실버", color: "from-gray-400 to-gray-600", levels: [{ level: 3, description: "회전 기술", tricks: ["B/S 180", "F/S 180"] }, { level: 2, description: "팝 샤빗", tricks: ["팝 샤빗", "F/S 샤빗"] }, { level: 1, description: "매뉴얼 기초", tricks: ["매뉴얼", "노즈 매뉴얼"] }] },
-  { name: "골드", color: "from-yellow-500 to-yellow-700", levels: [{ level: 3, description: "플립 기술 입문", tricks: ["킥플립", "힐플립"] }, { level: 2, description: "그라인드 기초", tricks: ["B/S 50-50", "F/S 50-50"] }, { level: 1, description: "슬라이드 기초", tricks: ["B/S 보드슬라이드", "F/S 보드슬라이드"] }] },
-  { name: "플래티넘", color: "from-slate-400 to-slate-600", levels: [{ level: 3, description: "응용 회전 플립", tricks: ["바리알 킥플립", "빅스핀"] }, { level: 2, description: "그라인드 응용", tricks: ["B/S 5-0", "F/S 5-0"] }, { level: 1, description: "슬라이드 응용", tricks: ["B/S 노즈슬라이드", "F/S 노즈슬라이드"] }] },
-  { name: "에메랄드", color: "from-emerald-500 to-emerald-700", levels: [{ level: 3, description: "고급 플립", tricks: ["360 플립", "하드플립"] }, { level: 2, description: "그라인드 심화", tricks: ["B/S 크룩트", "B/S 스미스"] }, { level: 1, description: "슬라이드 심화", tricks: ["B/S 테일슬라이드", "F/S 테일슬라이드"] }] },
-  { name: "다이아몬드", color: "from-sky-400 to-sky-600", levels: [{ level: 3, description: "스위치 기초", tricks: ["스위치 알리", "스위치 F/S 180"] }, { level: 2, description: "고난도 그라인드", tricks: ["F/S 블런트슬라이드", "B/S 블런트슬라이드"] }, { level: 1, description: "콤보 매뉴얼", tricks: ["킥플립 매뉴얼", "매뉴얼 샤빗아웃"] }] },
-  { name: "마스터", color: "from-purple-500 to-purple-700", levels: [{ level: 3, description: "스위치 플립", tricks: ["스위치 킥플립", "스위치 힐플립"] }, { level: 2, description: "널리 고급", tricks: ["널리 플립", "널리 힐플립"] }, { level: 1, description: "기술 결합", tricks: ["빅스핀 플립", "트레플립 매뉴얼"] }] },
-  { name: "그랜드마스터", color: "from-red-600 to-red-800", levels: [{ level: 3, description: "최고난도 회전", tricks: ["게토 버드", "360 하드플립"] }, { level: 2, description: "고급 스위치/널리 콤보", tricks: ["널리 빅스핀 플립", "스위치 트레플립"] }, { level: 1, description: "레일 콤보", tricks: ["크룩트 팝샤빗아웃", "킥플립 50-50"] }] },
-  { name: "챌린저", color: "from-cyan-400 to-cyan-600", levels: [{ level: 3, description: "프로 레벨 콤보", tricks: ["스위치 빅스핀 힐", "널리 360 플립"] }, { level: 2, description: "기술적 한계 도전", tricks: ["트레플립 5-0", "킥플립 백사이드 테일"] }, { level: 1, description: "창의적 기술", tricks: ["인워드 힐플립", "레이저 플립"] }] }
+const streetTricks: Trick[] = [
+  { id: "s1", category: "기초", name: "푸쉬오프\n(5M한발버티기)", videoUrl: "" },
+  { id: "s2", category: "기초", name: "틱택\n(10M타임어택)", videoUrl: "" },
+  { id: "s3", category: "기초", name: "FS앤드워크\n(10M타임어택)", videoUrl: "" },
+  { id: "s4", category: "기초", name: "BS앤드워크\n(10M타임어택)", videoUrl: "" },
+  { id: "s5", category: "기초", name: "매뉴얼\n(3M통과)", videoUrl: "" },
+  { id: "s6", category: "기초", name: "노즈매뉴얼\n(3M통과)", videoUrl: "" },
+  { id: "s7", category: "기초", name: "팬케이크플립", videoUrl: "" },
+  { id: "s8", category: "기초", name: "페이키BS킥턴", videoUrl: "" },
+  { id: "s9", category: "기초", name: "BS킥턴", videoUrl: "" },
+  { id: "s10", category: "기초", name: "페이키FS킥턴", videoUrl: "" },
+  { id: "s11", category: "기초", name: "FS킥턴", videoUrl: "" },
+  { id: "s12", category: "기초", name: "FS파워슬라이드", videoUrl: "" },
+  { id: "s13", category: "기초", name: "BS파워슬라이드", videoUrl: "" },
+  { id: "s14", category: "기초", name: "엑시드드롭", videoUrl: "" },
+  { id: "s15", category: "기초", name: "풋브레이크", videoUrl: "" },
+  { id: "s16", category: "기초", name: "테일브레이크", videoUrl: "" },
+  { id: "s17", category: "기초", name: "FS앤드오버", videoUrl: "" },
+  { id: "s18", category: "기초", name: "BS앤드오버", videoUrl: "" },
+  { id: "s19", category: "기초", name: "페이키 FS앤드오버", videoUrl: "" },
+  { id: "s20", category: "기초", name: "페이키 BS앤드오버", videoUrl: "" },
+  { id: "s21", category: "기초", name: "히피점프", videoUrl: "" },
+  { id: "a1", category: "알리", name: "주행 알리", videoUrl: "" },
+  { id: "a2", category: "알리", name: "알리 높이\n(10CM)", videoUrl: "" },
+  { id: "a3", category: "알리", name: "알리 높이\n(20CM)", videoUrl: "" },
+  { id: "a4", category: "알리", name: "알리 높이\n(30CM)", videoUrl: "" },
+  { id: "a5", category: "알리", name: "알리 높이\n(40CM)", videoUrl: "" },
+  { id: "a6", category: "알리", name: "알리 높이\n(50CM)", videoUrl: "" },
+  { id: "a7", category: "알리", name: "알리 높이\n(60CM)", videoUrl: "" },
+  { id: "a4_1", category: "알리", name: "알리 계단 1칸 업", videoUrl: "" },
+  { id: "a5_1", category: "알리", name: "알리 계단 2칸 업", videoUrl: "" },
+  { id: "a6_1", category: "알리", name: "알리 계단 1칸 다운", videoUrl: "" },
+  { id: "a7_1", category: "알리", name: "알리 계단 2칸 다운", videoUrl: "" },
+  { id: "a8", category: "알리", name: "페이키 알리", videoUrl: "" },
+  { id: "a9", category: "알리", name: "알리 멀리\n(20CM)", videoUrl: "" },
+  { id: "a10", category: "알리", name: "알리 멀리\n(40CM)", videoUrl: "" },
+  { id: "a11", category: "알리", name: "알리 멀리\n(60CM)", videoUrl: "" },
+  { id: "a12", category: "알리", name: "알리 멀리\n(100CM)", videoUrl: "" },
+  { id: "a13", category: "알리", name: "알리 멀리\n(160CM)", videoUrl: "" },
+  { id: "a14", category: "알리", name: "알리 멀리\n(200CM)", videoUrl: "" },
+  { id: "sh1", category: "샤빗", name: "BS샤빗", videoUrl: "" },
+  { id: "sh2", category: "샤빗", name: "BS360샤빗", videoUrl: "" },
+  { id: "sh3", category: "샤빗", name: "페이키BS샤빗", videoUrl: "" },
+  { id: "sh4", category: "샤빗", name: "페이키BS빅스핀", videoUrl: "" },
+  { id: "sh5", category: "샤빗", name: "BS빅스핀", videoUrl: "" },
+  { id: "sh6", category: "샤빗", name: "FS샤빗", videoUrl: "" },
+  { id: "sh7", category: "샤빗", name: "FS360샤빗", videoUrl: "" },
+  { id: "sh8", category: "샤빗", name: "페이키FS샤빗", videoUrl: "" },
+  { id: "sh9", category: "샤빗", name: "페이키FS빅스핀", videoUrl: "" },
+  { id: "sh10", category: "샤빗", name: "FS빅스핀", videoUrl: "" },
+  { id: "sh11", category: "샤빗", name: "임파서블", videoUrl: "" },
+  { id: "r1", category: "회전", name: "BS180알리", videoUrl: "" },
+  { id: "r2", category: "회전", name: "BS360알리", videoUrl: "" },
+  { id: "r3", category: "회전", name: "BS하프캡", videoUrl: "" },
+  { id: "r4", category: "회전", name: "BS풀캡", videoUrl: "" },
+  { id: "r5", category: "회전", name: "FS180알리", videoUrl: "" },
+  { id: "r6", category: "회전", name: "FS360알리", videoUrl: "" },
+  { id: "r7", category: "회전", name: "FS하프캡", videoUrl: "" },
+  { id: "r8", category: "회전", name: "FS풀캡", videoUrl: "" },
+  { id: "sl1", category: "슬라이드", name: "BS보드슬라이드", videoUrl: "" },
+  { id: "sl2", category: "슬라이드", name: "FS보드슬라이드", videoUrl: "" },
+  { id: "sl3", category: "슬라이드", name: "BS립슬라이드", videoUrl: "" },
+  { id: "sl4", category: "슬라이드", name: "FS립슬라이드", videoUrl: "" },
+  { id: "sl5", category: "슬라이드", name: "BS노즈슬라이드", videoUrl: "" },
+  { id: "sl6", category: "슬라이드", name: "FS노즈슬라이드", videoUrl: "" },
+  { id: "sl7", category: "슬라이드", name: "BS테일슬라이드", videoUrl: "" },
+  { id: "sl8", category: "슬라이드", name: "FS테일슬라이드", videoUrl: "" },
+  { id: "sl9", category: "슬라이드", name: "BS블런트슬라이드", videoUrl: "" },
+  { id: "sl10", category: "슬라이드", name: "FS블런트슬라이드", videoUrl: "" },
+  { id: "sl11", category: "슬라이드", name: "BS노즈블런트슬라이드", videoUrl: "" },
+  { id: "sl12", category: "슬라이드", name: "FS노즈블런트슬라이드", videoUrl: "" },
+  { id: "g1", category: "그라인드", name: "BS50-50 그라인드", videoUrl: "" },
+  { id: "g2", category: "그라인드", name: "FS50-50 그라인드", videoUrl: "" },
+  { id: "g3", category: "그라인드", name: "BS5-0 그라인드", videoUrl: "" },
+  { id: "g4", category: "그라인드", name: "FS5-0 그라인드", videoUrl: "" },
+  { id: "g5", category: "그라인드", name: "BS피블 그라인드", videoUrl: "" },
+  { id: "g6", category: "그라인드", name: "FS피블 그라인드", videoUrl: "" },
+  { id: "g7", category: "그라인드", name: "BS스미스 그라인드", videoUrl: "" },
+  { id: "g8", category: "그라인드", name: "FS스미스 그라인드", videoUrl: "" },
+  { id: "g9", category: "그라인드", name: "BS노즈 그라인드", videoUrl: "" },
+  { id: "g10", category: "그라인드", name: "BS크룩 그라인드", videoUrl: "" },
+  { id: "g11", category: "그라인드", name: "FS노즈 그라인드", videoUrl: "" },
+  { id: "g12", category: "그라인드", name: "FS크룩 그라인드", videoUrl: "" },
+  { id: "kf1", category: "킥플립", name: "킥플립", videoUrl: "" },
+  { id: "kf2", category: "킥플립", name: "베리얼킥플립", videoUrl: "" },
+  { id: "kf3", category: "킥플립", name: "트레플립", videoUrl: "" },
+  { id: "kf4", category: "킥플립", name: "BS킥플립", videoUrl: "" },
+  { id: "kf5", category: "킥플립", name: "FS킥플립", videoUrl: "" },
+  { id: "kf6", category: "킥플립", name: "BS빅스핀 킥플립", videoUrl: "" },
+  { id: "kf7", category: "킥플립", name: "BS360킥플립", videoUrl: "" },
+  { id: "kf8", category: "킥플립", name: "페이키 킥플립", videoUrl: "" },
+  { id: "kf9", category: "킥플립", name: "페이키 베리얼 킥플립", videoUrl: "" },
+  { id: "kf10", category: "킥플립", name: "BS하프캡 킥플립", videoUrl: "" },
+  { id: "kf11", category: "킥플립", name: "FS하프캡 킥플립", videoUrl: "" },
+  { id: "kf12", category: "킥플립", name: "풀캡 킥플립", videoUrl: "" },
+  { id: "kf13", category: "킥플립", name: "페이키 BS빅스핀 킥플립", videoUrl: "" },
+  { id: "kf14", category: "킥플립", name: "하드플립", videoUrl: "" },
+  { id: "hf1", category: "힐플립", name: "힐플립", videoUrl: "" },
+  { id: "hf2", category: "힐플립", name: "베리얼힐플립", videoUrl: "" },
+  { id: "hf3", category: "힐플립", name: "레이져플립", videoUrl: "" },
+  { id: "hf4", category: "힐플립", name: "BS힐플립", videoUrl: "" },
+  { id: "hf5", category: "힐플립", name: "FS힐플립", videoUrl: "" },
+  { id: "hf6", category: "힐플립", name: "FS빅스핀 힐플립", videoUrl: "" },
+  { id: "hf7", category: "힐플립", name: "FS360힐플립", videoUrl: "" },
+  { id: "hf8", category: "힐플립", name: "페이키 힐플립", videoUrl: "" },
+  { id: "hf9", category: "힐플립", name: "페이키 베리얼 힐플립", videoUrl: "" },
+  { id: "hf10", category: "힐플립", name: "BS하프캡 힐플립", videoUrl: "" },
+  { id: "hf11", category: "힐플립", name: "FS하프캡 힐플립", videoUrl: "" },
+  { id: "hf12", category: "힐플립", name: "풀캡 힐플립", videoUrl: "" },
+  { id: "hf13", category: "힐플립", name: "페이키 FS빅스핀 힐플립", videoUrl: "" },
+  { id: "hf14", category: "힐플립", name: "인워드힐플립", videoUrl: "" },
+  { id: "n1", category: "널리", name: "널리", videoUrl: "" },
+  { id: "n2", category: "널리", name: "널리 BS180", videoUrl: "" },
+  { id: "n3", category: "널리", name: "널리 BS360", videoUrl: "" },
+  { id: "n4", category: "널리", name: "널리 FS180", videoUrl: "" },
+  { id: "n5", category: "널리", name: "널리 FS360", videoUrl: "" },
+  { id: "n6", category: "널리", name: "널리 BS샤빗", videoUrl: "" },
+  { id: "n7", category: "널리", name: "널리 BS360샤빗", videoUrl: "" },
+  { id: "n8", category: "널리", name: "널리 BS빅스핀", videoUrl: "" },
+  { id: "n9", category: "널리", name: "널리 FS샤빗", videoUrl: "" },
+  { id: "n10", category: "널리", name: "널리 FS360샤빗", videoUrl: "" },
+  { id: "n11", category: "널리", name: "널리 FS빅스핀", videoUrl: "" },
+  { id: "n12", category: "널리", name: "널리 킥플립", videoUrl: "" },
+  { id: "n13", category: "널리", name: "널리 BS180킥플립", videoUrl: "" },
+  { id: "n14", category: "널리", name: "널리 BS360킥플립", videoUrl: "" },
+  { id: "n15", category: "널리", name: "널리 FS180킥플립", videoUrl: "" },
+  { id: "n16", category: "널리", name: "널리 FS360킥플립", videoUrl: "" },
+  { id: "n17", category: "널리", name: "널리 힐플립", videoUrl: "" },
+  { id: "n18", category: "널리", name: "널리 BS180힐플립", videoUrl: "" },
+  { id: "n19", category: "널리", name: "널리 BS360힐플립", videoUrl: "" },
+  { id: "n20", category: "널리", name: "널리 FS180힐플립", videoUrl: "" },
+  { id: "n21", category: "널리", name: "널리 FS360힐플립", videoUrl: "" },
+  { id: "sw1", category: "스위치", name: "스위치 알리", videoUrl: "" },
+  { id: "sw2", category: "스위치", name: "스위치 BS180", videoUrl: "" },
+  { id: "sw3", category: "스위치", name: "스위치 BS360", videoUrl: "" },
+  { id: "sw4", category: "스위치", name: "스위치 FS180", videoUrl: "" },
+  { id: "sw5", category: "스위치", name: "스위치 FS360", videoUrl: "" },
+  { id: "sw6", category: "스위치", name: "스위치 BS샤빗", videoUrl: "" },
+  { id: "sw7", category: "스위치", name: "스위치 BS360샤빗", videoUrl: "" },
+  { id: "sw8", category: "스위치", name: "스위치 BS빅스핀", videoUrl: "" },
+  { id: "sw9", category: "스위치", name: "스위치 FS샤빗", videoUrl: "" },
+  { id: "sw10", category: "스위치", name: "스위치 FS360샤빗", videoUrl: "" },
+  { id: "sw11", category: "스위치", name: "스위치 FS빅스핀", videoUrl: "" },
+  { id: "sw12", category: "스위치", name: "스위치 킥플립", videoUrl: "" },
+  { id: "sw13", category: "스위치", name: "스위치 BS180킥플립", videoUrl: "" },
+  { id: "sw14", category: "스위치", name: "스위치 BS360킥플립", videoUrl: "" },
+  { id: "sw15", category: "스위치", name: "스위치 FS180킥플립", videoUrl: "" },
+  { id: "sw16", category: "스위치", name: "스위치 FS360킥플립", videoUrl: "" },
+  { id: "sw17", category: "스위치", name: "스위치 힐플립", videoUrl: "" },
+  { id: "sw18", category: "스위치", name: "스위치 BS180힐플립", videoUrl: "" },
+  { id: "sw19", category: "스위치", name: "스위치 BS360힐플립", videoUrl: "" },
+  { id: "sw20", category: "스위치", name: "스위치 FS180힐플립", videoUrl: "" },
+  { id: "sw21", category: "스위치", name: "스위치 FS360힐플립", videoUrl: "" },
 ];
+
+const categories = ["기초", "알리", "샤빗", "회전", "슬라이드", "그라인드", "킥플립", "힐플립", "널리", "스위치"];
 
 const navigationTabs = [
   { name: "RAMP", href: "/ramp" },
@@ -64,31 +210,32 @@ const navigationTabs = [
 
 export default function StreetPage() {
   const pathname = usePathname();
-  const [selectedTrick, setSelectedTrick] = useState<{ name: string } | null>(null)
-  const [searchQuery, setSearchQuery] = useState("")
-  const [trickDescriptions, setTrickDescriptions] = useState<Record<string, string>>({})
-  const [currentDescription, setCurrentDescription] = useState("")
-  const [isEditingDescription, setIsEditingDescription] = useState(false)
-  const [trickVideos, setTrickVideos] = useState<Record<string, string[]>>({})
-  const [newVideoUrl, setNewVideoUrl] = useState("")
-  const [isAddingVideo, setIsAddingVideo] = useState(false)
-  const [editingVideoIdx, setEditingVideoIdx] = useState<number | null>(null)
-  const [editingVideoUrl, setEditingVideoUrl] = useState("")
-  const [isSearchFocused, setIsSearchFocused] = useState(false)
-  const [isUploading, setIsUploading] = useState(false) 
-  const searchRef = useRef<HTMLDivElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  
+  const [selectedTrick, setSelectedTrick] = useState<Trick | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [trickDescriptions, setTrickDescriptions] = useState<Record<string, string>>({});
+  const [currentDescription, setCurrentDescription] = useState("");
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [trickVideos, setTrickVideos] = useState<Record<string, string[]>>({});
+  const [newVideoUrl, setNewVideoUrl] = useState("");
+  const [isAddingVideo, setIsAddingVideo] = useState(false);
+  const [editingVideoIdx, setEditingVideoIdx] = useState<number | null>(null);
+  const [editingVideoUrl, setEditingVideoUrl] = useState("");
+  const [isUploading, setIsUploading] = useState(false); 
+  const searchRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 스크롤 및 영상 제어를 위한 Ref
   const videoRefs = useRef<(HTMLDivElement | null)[]>([]);
   const nativeVideoRefs = useRef<(HTMLVideoElement | null)[]>([]);
 
+  // 1. Supabase에서 데이터 불러오기
   const loadAllData = async () => {
     const { data: descData } = await supabase.from('street_descriptions').select('*');
     if (descData) {
       const descObj = descData.reduce((acc, cur) => ({ ...acc, [cur.trick_name]: cur.content }), {});
       setTrickDescriptions(descObj);
     }
-
     const { data: videoData } = await supabase.from('street_videos').select('*');
     if (videoData) {
       const videoObj = videoData.reduce((acc, cur) => ({ ...acc, [cur.trick_name]: cur.urls }), {});
@@ -98,22 +245,25 @@ export default function StreetPage() {
 
   useEffect(() => {
     loadAllData();
-    const handleClickOutside = (e: MouseEvent) => { if (searchRef.current && !searchRef.current.contains(e.target as Node)) setIsSearchFocused(false) }
-    document.addEventListener("mousedown", handleClickOutside)
-    return () => document.removeEventListener("mousedown", handleClickOutside)
-  }, [])
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) setIsSearchFocused(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (selectedTrick) {
-      setCurrentDescription(trickDescriptions[selectedTrick.name] || "")
-      setIsEditingDescription(false); 
-      setNewVideoUrl(""); 
-      setIsAddingVideo(false); 
+      setCurrentDescription(trickDescriptions[selectedTrick.name] || "");
+      setIsEditingDescription(false);
+      setNewVideoUrl("");
+      setIsAddingVideo(false);
       setEditingVideoIdx(null);
+      // 다이얼로그 열릴 때 Ref 배열 초기화
       videoRefs.current = [];
       nativeVideoRefs.current = [];
     }
-  }, [selectedTrick, trickDescriptions])
+  }, [selectedTrick, trickDescriptions]);
 
   const jumpToVideoTime = (videoNum: number, timeStr: string) => {
     const [min, sec] = timeStr.replace(/[()]/g, "").split(":").map(Number);
@@ -125,30 +275,34 @@ export default function StreetPage() {
       const targetUrl = videos[videoIndex];
       if (!targetUrl) return;
 
-      const containerElement = videoRefs.current[videoIndex];
-      if (containerElement) {
-        containerElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // [공통] 해당 영상이 위치한 컨테이너로 부드럽게 스크롤
+      const container = videoRefs.current[videoIndex];
+      if (container) {
+        container.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
 
+      // 1. 인스타그램 처리
       if (targetUrl.includes("instagram.com")) {
         let cleanUrl = targetUrl.replace("/embed", "").split("?")[0];
         if (cleanUrl.endsWith("/")) cleanUrl = cleanUrl.slice(0, -1);
         window.open(`${cleanUrl}/?t=${totalSeconds}s`, "_blank");
       } 
+      // 2. 유튜브 처리 (수정된 핵심 로직: 캐시 버스터 추가)
       else if (targetUrl.includes("youtube.com") || targetUrl.includes("youtu.be")) {
         const updatedVideos = [...videos];
         const embedUrl = convertToEmbedUrl(targetUrl, totalSeconds);
+        // [수정 포인트] URL에 난수(시간)를 섞어서 브라우저가 매번 새로운 URL로 인식하도록 강제합니다.
         const separator = embedUrl.includes('?') ? '&' : '?';
-        // 캐시 버스터 추가: 매번 다른 URL로 인식시켜 iframe 강제 새로고침
         updatedVideos[videoIndex] = `${embedUrl}${separator}t_cb=${Date.now()}`;
+        
         setTrickVideos({ ...trickVideos, [selectedTrick.name]: updatedVideos });
       } 
+      // 3. 직접 업로드된 로컬 영상 처리
       else if (targetUrl.includes("supabase.co")) {
         const videoElement = nativeVideoRefs.current[videoIndex];
         if (videoElement) {
-          // 직접 재생 시간 설정 (다운로드 방지)
           videoElement.currentTime = totalSeconds;
-          videoElement.play().catch(e => console.error("Auto-play failed:", e));
+          videoElement.play().catch(e => console.log("자동 재생 대기 중..."));
         }
       }
     }
@@ -168,11 +322,7 @@ export default function StreetPage() {
         const isYoutube = videoUrl.includes("youtube") || videoUrl.includes("youtu.be");
         
         elements.push(
-          <button 
-            key={`btn-${i}`} 
-            onClick={() => jumpToVideoTime(videoNum, timeStr)} 
-            className={`font-bold hover:underline inline-flex items-center gap-0.5 mx-0.5 px-1 rounded transition-colors ${isInstagram ? "text-pink-600 bg-pink-50" : isYoutube ? "text-primary bg-primary/5" : "text-blue-600 bg-blue-50"}`}
-          >
+          <button key={`btn-${i}`} onClick={() => jumpToVideoTime(videoNum, timeStr)} className={`font-bold hover:underline inline-flex items-center gap-0.5 mx-0.5 px-1 rounded transition-colors ${isInstagram ? "text-pink-600 bg-pink-50" : isYoutube ? "text-primary bg-primary/5" : "text-blue-600 bg-blue-50"}`}>
             {isInstagram ? <ExternalLink className="size-3" /> : isYoutube ? <PlayCircle className="size-3" /> : <FileVideo className="size-3" />}
             영상{videoNum}({timeStr})
           </button>
@@ -216,7 +366,7 @@ export default function StreetPage() {
       alert("영상이 성공적으로 업로드되었습니다.");
     } catch (error: any) {
       console.error(error);
-      alert("업로드 실패: " + error.message);
+      alert("업로드 중 오류 발생: " + error.message);
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -228,31 +378,28 @@ export default function StreetPage() {
       const { error } = await supabase
         .from('street_descriptions')
         .upsert({ trick_name: selectedTrick.name, content: currentDescription }, { onConflict: 'trick_name' });
-      
       if (!error) {
         setTrickDescriptions(prev => ({ ...prev, [selectedTrick.name]: currentDescription }));
         setIsEditingDescription(false);
       }
     }
-  }
+  };
 
   const addVideo = async () => {
     if (selectedTrick && newVideoUrl.trim()) {
       const embedUrl = convertToEmbedUrl(newVideoUrl.trim());
       const currentUrls = trickVideos[selectedTrick.name] || [];
       const updatedUrls = [...currentUrls, embedUrl];
-
       const { error } = await supabase
         .from('street_videos')
         .upsert({ trick_name: selectedTrick.name, urls: updatedUrls }, { onConflict: 'trick_name' });
-
       if (!error) {
         setTrickVideos(prev => ({ ...prev, [selectedTrick.name]: updatedUrls }));
         setNewVideoUrl("");
         setIsAddingVideo(false);
       }
     }
-  }
+  };
 
   const updateVideosInDb = async (trickName: string, urls: string[]) => {
     const { error } = await supabase
@@ -268,7 +415,6 @@ export default function StreetPage() {
       const embedUrl = convertToEmbedUrl(editingVideoUrl.trim());
       const current = [...(trickVideos[selectedTrick.name] || [])];
       current[idx] = embedUrl;
-      
       if (await updateVideosInDb(selectedTrick.name, current)) {
         setTrickVideos(prev => ({ ...prev, [selectedTrick.name]: current }));
         setEditingVideoIdx(null);
@@ -285,8 +431,9 @@ export default function StreetPage() {
     }
   }
 
-  const handleTrickClick = (trickName: string) => { setSelectedTrick({ name: trickName }); setSearchQuery(""); setIsSearchFocused(false) }
-  const searchResults = searchQuery ? streetRanks.flatMap(r => r.levels.flatMap(l => l.tricks.filter(t => t.toLowerCase().includes(searchQuery.toLowerCase())).map(t => ({ name: t, rankName: r.name, level: l.level })))) : []
+  const searchResults = searchQuery.trim() === "" ? [] : streetTricks.filter(t => t.name.toLowerCase().includes(searchQuery.toLowerCase()) || t.category.toLowerCase().includes(searchQuery.toLowerCase()));
+
+  const handleTrickClick = (trick: Trick) => { setSelectedTrick(trick); setSearchQuery(""); setIsSearchFocused(false) };
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -304,17 +451,17 @@ export default function StreetPage() {
             </div>
             <div className="relative flex-1 md:max-w-md" ref={searchRef}>
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input placeholder="기술 검색..." className="pl-9" value={searchQuery} onFocus={() => setIsSearchFocused(true)} onChange={(e) => setSearchQuery(e.target.value)} />
+              <Input placeholder="기술 또는 카테고리 검색..." className="pl-9" value={searchQuery} onFocus={() => setIsSearchFocused(true)} onChange={(e) => setSearchQuery(e.target.value)} />
               {isSearchFocused && searchResults.length > 0 && (
                 <div className="absolute top-full left-0 right-0 z-50 mt-2 max-h-[300px] overflow-y-auto rounded-md border bg-popover shadow-xl p-1">
-                  {searchResults.map((r, i) => (
-                    <button key={i} onClick={() => handleTrickClick(r.name)} className="flex w-full flex-col p-2 hover:bg-accent rounded-sm text-left"><span className="text-sm font-bold">{r.name}</span><span className="text-xs text-muted-foreground">{r.rankName} Lv.{r.level}</span></button>
+                  {searchResults.map((t) => (
+                    <button key={t.id} onClick={() => handleTrickClick(t)} className="flex w-full flex-col p-2 hover:bg-accent rounded-sm text-left border-b last:border-none">
+                      <span className="text-sm font-bold">{t.name.replace('\n', ' ')}</span>
+                      <span className="text-[10px] text-muted-foreground">{t.category}</span>
+                    </button>
                   ))}
                 </div>
               )}
-            </div>
-            <div className="hidden md:flex">
-              <Button variant="ghost" size="icon"><User className="size-5" /></Button>
             </div>
           </div>
           <nav className="flex gap-1 pb-px overflow-x-auto no-scrollbar">
@@ -333,20 +480,17 @@ export default function StreetPage() {
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        <div className="mb-10 text-center"><h2 className="text-5xl font-black italic tracking-tighter text-primary">STREET</h2><p className="text-muted-foreground font-mono uppercase text-xs">Skateboarding Street Rank Test</p></div>
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {streetRanks.map((rank) => (
-            <div key={rank.name} className="rounded-2xl border bg-card p-5 shadow-sm hover:shadow-md transition-shadow">
-              <div className="mb-5 flex items-center gap-3"><div className={`size-12 rounded-lg bg-gradient-to-br ${rank.color}`} /><h3 className="text-xl font-bold italic">{rank.name}</h3></div>
-              <div className="space-y-5">
-                {rank.levels.map((lv) => (
-                  <div key={lv.level} className="space-y-2">
-                    <div className="flex items-center gap-2 border-b pb-1"><span className="text-xs font-black text-primary">{rank.name} {lv.level}</span><span className="text-[10px] text-muted-foreground font-medium">{lv.description}</span></div>
-                    <div className="flex flex-wrap gap-1.5">{lv.tricks.map((trick, i) => (<button key={i} onClick={() => handleTrickClick(trick)} className="text-[11px] px-2 py-1 rounded bg-muted hover:bg-primary hover:text-white transition-colors">{trick}</button>))}</div>
-                  </div>
+        <div className="mb-10 text-center"><h2 className="text-5xl font-black italic tracking-tighter text-primary">STREET</h2><p className="text-muted-foreground font-mono uppercase text-xs">SKATEBOARD STREET SKILL LIBRARY</p></div>
+        <div className="grid gap-8 lg:grid-cols-2">
+          {categories.map((cat) => (
+            <section key={cat} className="rounded-2xl border bg-card p-6 shadow-sm hover:shadow-md transition-shadow">
+              <h3 className="mb-4 flex items-center gap-2 text-xl font-bold text-primary italic uppercase"><span className="h-1 w-6 bg-primary rounded-full" /> {cat}</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {streetTricks.filter((t) => t.category === cat).map((t) => (
+                  <Button key={t.id} variant="outline" className="h-auto min-h-[52px] justify-start text-left text-[11px] leading-tight whitespace-pre-wrap hover:border-primary/50 hover:bg-primary/5 transition-all" onClick={() => setSelectedTrick(t)}>{t.name}</Button>
                 ))}
               </div>
-            </div>
+            </section>
           ))}
         </div>
       </main>
@@ -359,18 +503,21 @@ export default function StreetPage() {
         }
       }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto scrollbar-thin">
-          <DialogHeader><DialogTitle className="text-2xl font-black italic">{selectedTrick?.name}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <div className="text-[10px] font-bold text-primary uppercase tracking-widest opacity-70">{selectedTrick?.category}</div>
+            <DialogTitle className="text-2xl font-black italic">{selectedTrick?.name.replace('\n', ' ')}</DialogTitle>
+          </DialogHeader>
           <div className="space-y-6">
             <div className="space-y-8">
               {(trickVideos[selectedTrick?.name || ""] || []).length === 0 ? (
-                <div className="aspect-video flex flex-col gap-2 items-center justify-center border-2 border-dashed rounded-xl text-muted-foreground text-sm bg-muted/10"><Youtube className="size-8 opacity-20" />영상을 추가해주세요 (URL 혹은 직접 업로드).</div>
+                <div className="aspect-video flex flex-col gap-2 items-center justify-center border-2 border-dashed rounded-xl text-muted-foreground text-sm bg-muted/10"><Youtube className="size-8 opacity-20" />등록된 학습 영상이 없습니다.</div>
               ) : (
                 trickVideos[selectedTrick?.name || ""].map((url, i) => (
                   <div key={i} ref={(el) => (videoRefs.current[i] = el)} className="space-y-3 pb-6 border-b last:border-0 scroll-mt-6">
                     <div className="flex justify-between items-center">
                       <div className="flex items-center gap-2 text-[10px] font-bold opacity-50 uppercase tracking-widest">
-                        {url.includes("instagram") ? <Instagram className="size-3"/> : url.includes("youtube") || url.includes("youtu.be") ? <Youtube className="size-3"/> : <FileVideo className="size-3"/>} 
-                        {url.includes("supabase.co") ? "UPLOADED" : "VIDEO"} #{i+1}
+                        {url.includes("instagram") ? <Instagram className="size-3"/> : url.includes("youtube") || url.includes("youtu.be") ? <Youtube className="size-3"/> : <FileVideo className="size-3"/>}
+                        {url.includes("supabase.co") ? "UPLOADED" : "LINK"} VIDEO #{i+1}
                       </div>
                       <div className="flex gap-1">
                         <Button variant="ghost" size="sm" className="h-7 px-2 text-[10px]" onClick={() => startEditVideo(i, url)}><Edit2 className="size-3 mr-1"/>수정</Button>
@@ -380,7 +527,7 @@ export default function StreetPage() {
                     {editingVideoIdx === i ? (
                       <div className="flex gap-2 bg-muted p-3 rounded-lg"><Input className="h-9 text-sm" value={editingVideoUrl} onChange={(e) => setEditingVideoUrl(e.target.value)}/><Button size="sm" className="h-9 px-2" onClick={() => saveEditVideo(i)}><Check className="size-4"/></Button><Button size="sm" variant="ghost" className="h-9 px-2" onClick={() => setEditingVideoIdx(null)}><X className="size-4"/></Button></div>
                     ) : (
-                      <div className="relative w-full overflow-hidden rounded-xl bg-black shadow-lg" style={{ paddingTop: url.includes("instagram") ? "125%" : "56.25%" }}>
+                      <div className="relative w-full overflow-hidden rounded-xl bg-black shadow-lg" style={{ paddingTop: (url.includes("youtube") || url.includes("youtu.be")) ? "56.25%" : url.includes("instagram") ? "125%" : "56.25%" }}>
                         {url.includes("youtube") || url.includes("instagram") || url.includes("youtu.be") ? (
                           <iframe src={url} className="absolute top-0 left-0 w-full h-full" allowFullScreen />
                         ) : (
@@ -399,12 +546,12 @@ export default function StreetPage() {
                 ))
               )}
             </div>
-
+            
             <div className="pt-4 border-t">
               {isAddingVideo ? (
                 <div className="flex flex-col gap-3">
                   <div className="flex gap-2">
-                    <Input placeholder="유튜브/인스타 주소" value={newVideoUrl} onChange={(e) => setNewVideoUrl(e.target.value)} />
+                    <Input placeholder="유튜브 또는 인스타그램 주소" value={newVideoUrl} onChange={(e) => setNewVideoUrl(e.target.value)} />
                     <input type="file" ref={fileInputRef} className="hidden" accept="video/*" onChange={handleFileUpload} />
                     <Button variant="secondary" className="shrink-0" disabled={isUploading} onClick={() => fileInputRef.current?.click()}>
                       {isUploading ? <Loader2 className="size-4 animate-spin"/> : <Upload className="size-4 mr-1"/>}
@@ -413,20 +560,20 @@ export default function StreetPage() {
                   </div>
                   <div className="flex gap-2 justify-end">
                     <Button variant="ghost" size="sm" onClick={() => setIsAddingVideo(false)}>취소</Button>
-                    <Button size="sm" onClick={addVideo} disabled={!newVideoUrl.trim()}>URL 추가</Button>
+                    <Button size="sm" onClick={addVideo} disabled={!newVideoUrl.trim()}>URL 등록</Button>
                   </div>
                 </div>
               ) : (
-                <Button variant="outline" className="w-full border-dashed py-8 bg-muted/5" onClick={() => setIsAddingVideo(true)}><Plus className="mr-2 size-4"/>새 영상 추가 (URL 또는 갤러리 파일)</Button>
+                <Button variant="outline" className="w-full border-dashed py-8 bg-muted/5 hover:bg-muted/10 transition-colors" onClick={() => setIsAddingVideo(true)}><Plus className="mr-2 size-4"/>학습 영상 추가 (URL 또는 갤러리)</Button>
               )}
             </div>
 
             <div className="space-y-2 border-t pt-4">
               <div className="flex justify-between items-center mb-2"><span className="text-[10px] font-bold italic tracking-widest opacity-60 uppercase">Tips & Notes</span><Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => isEditingDescription ? saveDescription() : setIsEditingDescription(true)}>{isEditingDescription ? "저장" : "수정"}</Button></div>
               {isEditingDescription ? (
-                <Textarea value={currentDescription} onChange={(e) => setCurrentDescription(e.target.value)} className="min-h-[140px] bg-muted/30 border-none resize-none text-sm p-4" placeholder="영상1(00:20) 처럼 작성하세요." />
+                <Textarea value={currentDescription} onChange={(e) => setCurrentDescription(e.target.value)} className="min-h-[140px] bg-muted/30 border-none resize-none focus-visible:ring-1 text-sm p-4" placeholder="예: 영상1(00:20) 처럼 작성하면 타임라인 링크가 활성화됩니다." />
               ) : (
-                <div className="p-4 rounded-md bg-muted/30 text-sm min-h-[80px] border border-transparent leading-relaxed">{currentDescription ? renderDescriptionWithLinks(currentDescription) : <span className="text-muted-foreground italic text-xs">내용을 기록해보세요.</span>}</div>
+                <div className="p-4 rounded-md bg-muted/30 text-sm min-h-[80px] border border-transparent leading-relaxed">{currentDescription ? renderDescriptionWithLinks(currentDescription) : <span className="text-muted-foreground italic text-xs">아직 등록된 팁이 없습니다. 본인만의 노하우를 기록해보세요.</span>}</div>
               )}
             </div>
           </div>
