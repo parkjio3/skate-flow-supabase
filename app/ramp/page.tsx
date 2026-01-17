@@ -12,7 +12,6 @@ import { supabase } from '@/lib/supabase'
 
 const convertToEmbedUrl = (url: string, startTime?: number) => {
   if (!url) return "";
-  // Supabase Storage URL인 경우 (직접 업로드된 영상)
   if (url.includes("supabase.co/storage/v1/object/public/")) {
     return url;
   }
@@ -80,12 +79,9 @@ export default function RampPage() {
   const searchRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   
-  // 비디오 태그 및 iframe 컨테이너를 통합 제어하기 위한 Ref 배열
   const videoRefs = useRef<(HTMLDivElement | null)[]>([]);
-  // 실제 HTML5 video 요소에 접근하기 위한 Ref 배열
   const nativeVideoRefs = useRef<(HTMLVideoElement | null)[]>([]);
 
-  // 1. Supabase에서 데이터 불러오기 (초기 로드)
   const loadAllData = async () => {
     const { data: descData } = await supabase.from('ramp_descriptions').select('*');
     if (descData) {
@@ -114,7 +110,6 @@ export default function RampPage() {
       setNewVideoUrl(""); 
       setIsAddingVideo(false); 
       setEditingVideoIdx(null);
-      // 트릭이 바뀔 때 모든 참조 초기화
       videoRefs.current = [];
       nativeVideoRefs.current = [];
     }
@@ -130,36 +125,31 @@ export default function RampPage() {
       const targetUrl = videos[videoIndex];
       if (!targetUrl) return;
 
-      // 공통: 해당 영상 컨테이너로 스크롤 이동
       const containerElement = videoRefs.current[videoIndex];
       if (containerElement) {
         containerElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
 
-      // 1. 인스타그램 처리
       if (targetUrl.includes("instagram.com")) {
         let cleanUrl = targetUrl.replace("/embed", "").split("?")[0];
         if (cleanUrl.endsWith("/")) cleanUrl = cleanUrl.slice(0, -1);
         window.open(`${cleanUrl}/?t=${totalSeconds}s`, "_blank");
       } 
-      // 2. 유튜브 처리
       else if (targetUrl.includes("youtube.com") || targetUrl.includes("youtu.be")) {
         const updatedVideos = [...videos];
-        updatedVideos[videoIndex] = convertToEmbedUrl(targetUrl, totalSeconds);
+        // 캐시 버스터(timestamp)를 추가하여 리액트가 URL 변경을 감지하고 iframe을 다시 로드하도록 유도
+        const embedUrl = convertToEmbedUrl(targetUrl, totalSeconds);
+        const separator = embedUrl.includes('?') ? '&' : '?';
+        updatedVideos[videoIndex] = `${embedUrl}${separator}t_cb=${Date.now()}`;
+        
         setTrickVideos({ ...trickVideos, [selectedTrick.name]: updatedVideos });
       } 
-      // 3. 로컬 업로드 영상 처리 (다운로드 문제 해결 핵심 코드)
       else if (targetUrl.includes("supabase.co")) {
         const videoElement = nativeVideoRefs.current[videoIndex];
         if (videoElement) {
-          // window.open을 호출하는 대신 비디오 엘리먼트의 시간을 직접 조정합니다.
           videoElement.currentTime = totalSeconds;
           videoElement.play().catch(e => console.error("Auto-play failed:", e));
         }
-      }
-      // 기타 외부 링크
-      else {
-        window.open(targetUrl, "_blank");
       }
     }
   };
