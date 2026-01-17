@@ -20,7 +20,7 @@ export default function HomePage() {
   const [targetPath, setTargetPath] = useState("")
   const [error, setError] = useState(false)
 
-  const CORRECT_PASSWORD = "1234"
+  const CORRECT_PASSWORD = "1431"
 
   // 버튼 클릭 시 호출
   const handleProtectedNavigation = (path: string) => {
