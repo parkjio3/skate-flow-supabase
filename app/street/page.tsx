@@ -221,9 +221,13 @@ export default function StreetPage() {
   const [isAddingVideo, setIsAddingVideo] = useState(false);
   const [editingVideoIdx, setEditingVideoIdx] = useState<number | null>(null);
   const [editingVideoUrl, setEditingVideoUrl] = useState("");
-  const [isUploading, setIsUploading] = useState(false); // 업로드 상태 관리
+  const [isUploading, setIsUploading] = useState(false); 
   const searchRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null); // 파일 인풋 참조
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 자동 스크롤을 위한 Ref 통합 관리
+  const videoRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const nativeVideoRefs = useRef<(HTMLVideoElement | null)[]>([]);
 
   // 1. Supabase에서 데이터 불러오기 (초기 로드)
   const loadAllData = async () => {
@@ -255,6 +259,9 @@ export default function StreetPage() {
       setNewVideoUrl("");
       setIsAddingVideo(false);
       setEditingVideoIdx(null);
+      // 다이얼로그 열릴 때 Ref 초기화
+      videoRefs.current = [];
+      nativeVideoRefs.current = [];
     }
   }, [selectedTrick, trickDescriptions]);
 
@@ -262,20 +269,37 @@ export default function StreetPage() {
     const [min, sec] = timeStr.replace(/[()]/g, "").split(":").map(Number);
     const totalSeconds = min * 60 + sec;
     const videoIndex = videoNum - 1;
+
     if (selectedTrick) {
       const videos = trickVideos[selectedTrick.name] || [];
       const targetUrl = videos[videoIndex];
-      if (targetUrl) {
-        if (targetUrl.includes("instagram.com")) {
-          let cleanUrl = targetUrl.replace("/embed", "").split("?")[0];
-          if (cleanUrl.endsWith("/")) cleanUrl = cleanUrl.slice(0, -1);
-          window.open(`${cleanUrl}/?t=${totalSeconds}s`, "_blank");
-        } else if (targetUrl.includes("youtube.com") || targetUrl.includes("youtu.be")) {
-          const updatedVideos = [...videos];
-          updatedVideos[videoIndex] = convertToEmbedUrl(targetUrl, totalSeconds);
-          setTrickVideos({ ...trickVideos, [selectedTrick.name]: updatedVideos });
+      if (!targetUrl) return;
+
+      // 공통: 해당 영상 부모 컨테이너로 스크롤 (유튜브/인스타/직접업로드 공통)
+      const containerElement = videoRefs.current[videoIndex];
+      if (containerElement) {
+        containerElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+
+      // 1. 인스타그램 처리
+      if (targetUrl.includes("instagram.com")) {
+        let cleanUrl = targetUrl.replace("/embed", "").split("?")[0];
+        if (cleanUrl.endsWith("/")) cleanUrl = cleanUrl.slice(0, -1);
+        window.open(`${cleanUrl}/?t=${totalSeconds}s`, "_blank");
+      } 
+      // 2. 유튜브 처리
+      else if (targetUrl.includes("youtube.com") || targetUrl.includes("youtu.be")) {
+        const updatedVideos = [...videos];
+        updatedVideos[videoIndex] = convertToEmbedUrl(targetUrl, totalSeconds);
+        setTrickVideos({ ...trickVideos, [selectedTrick.name]: updatedVideos });
+      } 
+      // 3. 직접 업로드된 영상 처리
+      else {
+        const videoElement = nativeVideoRefs.current[videoIndex];
+        if (videoElement) {
+          videoElement.currentTime = totalSeconds;
+          videoElement.play().catch(e => console.error("Auto-play failed:", e));
         } else {
-          // 직접 업로드 영상은 시간 이동 로직이 별도 필요할 수 있으나, 우선 새창 열기나 알림 등으로 처리 가능
           window.open(targetUrl, "_blank");
         }
       }
@@ -306,7 +330,6 @@ export default function StreetPage() {
     return <div className="whitespace-pre-wrap leading-relaxed">{elements}</div>;
   };
 
-  // 갤러리 영상 업로드 처리
   const handleFileUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedTrick) return;
@@ -317,19 +340,16 @@ export default function StreetPage() {
       const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
       const filePath = `street/${fileName}`;
 
-      // 1. Supabase Storage 업로드 (videos 버킷의 street 폴더)
       const { data, error: uploadError } = await supabase.storage
         .from('videos')
         .upload(filePath, file);
 
       if (uploadError) throw uploadError;
 
-      // 2. 공개 URL 가져오기
       const { data: { publicUrl } } = supabase.storage
         .from('videos')
         .getPublicUrl(filePath);
 
-      // 3. DB에 URL 저장
       const currentUrls = trickVideos[selectedTrick.name] || [];
       const updatedUrls = [...currentUrls, publicUrl];
 
@@ -473,7 +493,13 @@ export default function StreetPage() {
         </div>
       </main>
 
-      <Dialog open={!!selectedTrick} onOpenChange={() => setSelectedTrick(null)}>
+      <Dialog open={!!selectedTrick} onOpenChange={(open) => {
+        if (!open) {
+          setSelectedTrick(null);
+          videoRefs.current = [];
+          nativeVideoRefs.current = [];
+        }
+      }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto scrollbar-thin">
           <DialogHeader>
             <div className="text-[10px] font-bold text-primary uppercase tracking-widest opacity-70">{selectedTrick?.category}</div>
@@ -485,7 +511,7 @@ export default function StreetPage() {
                 <div className="aspect-video flex flex-col gap-2 items-center justify-center border-2 border-dashed rounded-xl text-muted-foreground text-sm bg-muted/10"><Youtube className="size-8 opacity-20" />등록된 학습 영상이 없습니다.</div>
               ) : (
                 trickVideos[selectedTrick?.name || ""].map((url, i) => (
-                  <div key={i} className="space-y-3 pb-6 border-b last:border-0">
+                  <div key={i} ref={(el) => (videoRefs.current[i] = el)} className="space-y-3 pb-6 border-b last:border-0 scroll-mt-6">
                     <div className="flex justify-between items-center">
                       <div className="flex items-center gap-2 text-[10px] font-bold opacity-50 uppercase tracking-widest">
                         {url.includes("instagram") ? <Instagram className="size-3"/> : url.includes("youtube") || url.includes("youtu.be") ? <Youtube className="size-3"/> : <FileVideo className="size-3"/>}
@@ -503,7 +529,13 @@ export default function StreetPage() {
                         {url.includes("youtube") || url.includes("instagram") || url.includes("youtu.be") ? (
                           <iframe src={url} className="absolute top-0 left-0 w-full h-full" allowFullScreen />
                         ) : (
-                          <video src={url} className="absolute top-0 left-0 w-full h-full" controls playsInline />
+                          <video 
+                            ref={(el) => (nativeVideoRefs.current[i] = el)}
+                            src={url} 
+                            className="absolute top-0 left-0 w-full h-full" 
+                            controls 
+                            playsInline 
+                          />
                         )}
                       </div>
                     )}
@@ -516,24 +548,9 @@ export default function StreetPage() {
               {isAddingVideo ? (
                 <div className="flex flex-col gap-3">
                   <div className="flex gap-2">
-                    <Input 
-                      placeholder="유튜브 또는 인스타그램 주소" 
-                      value={newVideoUrl} 
-                      onChange={(e) => setNewVideoUrl(e.target.value)} 
-                    />
-                    <input 
-                      type="file" 
-                      ref={fileInputRef} 
-                      className="hidden" 
-                      accept="video/*" 
-                      onChange={handleFileUpload}
-                    />
-                    <Button 
-                      variant="secondary" 
-                      className="shrink-0" 
-                      disabled={isUploading}
-                      onClick={() => fileInputRef.current?.click()}
-                    >
+                    <Input placeholder="유튜브 또는 인스타그램 주소" value={newVideoUrl} onChange={(e) => setNewVideoUrl(e.target.value)} />
+                    <input type="file" ref={fileInputRef} className="hidden" accept="video/*" onChange={handleFileUpload} />
+                    <Button variant="secondary" className="shrink-0" disabled={isUploading} onClick={() => fileInputRef.current?.click()}>
                       {isUploading ? <Loader2 className="size-4 animate-spin"/> : <Upload className="size-4 mr-1"/>}
                       {isUploading ? "업로드 중" : "업로드"}
                     </Button>
