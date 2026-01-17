@@ -225,11 +225,11 @@ export default function StreetPage() {
   const searchRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 자동 스크롤을 위한 Ref 통합 관리
+  // 스크롤 및 영상 제어를 위한 Ref
   const videoRefs = useRef<(HTMLDivElement | null)[]>([]);
   const nativeVideoRefs = useRef<(HTMLVideoElement | null)[]>([]);
 
-  // 1. Supabase에서 데이터 불러오기 (초기 로드)
+  // 1. Supabase에서 데이터 불러오기
   const loadAllData = async () => {
     const { data: descData } = await supabase.from('street_descriptions').select('*');
     if (descData) {
@@ -259,7 +259,7 @@ export default function StreetPage() {
       setNewVideoUrl("");
       setIsAddingVideo(false);
       setEditingVideoIdx(null);
-      // 다이얼로그 열릴 때 Ref 초기화
+      // 다이얼로그 열릴 때 Ref 배열 초기화
       videoRefs.current = [];
       nativeVideoRefs.current = [];
     }
@@ -275,32 +275,31 @@ export default function StreetPage() {
       const targetUrl = videos[videoIndex];
       if (!targetUrl) return;
 
-      // 공통: 해당 영상 부모 컨테이너로 스크롤 (유튜브/인스타/직접업로드 공통)
-      const containerElement = videoRefs.current[videoIndex];
-      if (containerElement) {
-        containerElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // [공통] 해당 영상이 위치한 컨테이너로 부드럽게 스크롤
+      const container = videoRefs.current[videoIndex];
+      if (container) {
+        container.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
 
-      // 1. 인스타그램 처리
+      // 1. 인스타그램 처리 (인스타는 임베드 내 시간 이동을 공식 지원하지 않으므로 새창 권장)
       if (targetUrl.includes("instagram.com")) {
         let cleanUrl = targetUrl.replace("/embed", "").split("?")[0];
         if (cleanUrl.endsWith("/")) cleanUrl = cleanUrl.slice(0, -1);
         window.open(`${cleanUrl}/?t=${totalSeconds}s`, "_blank");
       } 
-      // 2. 유튜브 처리
+      // 2. 유튜브 처리 (iframe 주소를 start 파라미터와 함께 갱신)
       else if (targetUrl.includes("youtube.com") || targetUrl.includes("youtu.be")) {
         const updatedVideos = [...videos];
         updatedVideos[videoIndex] = convertToEmbedUrl(targetUrl, totalSeconds);
         setTrickVideos({ ...trickVideos, [selectedTrick.name]: updatedVideos });
       } 
-      // 3. 직접 업로드된 영상 처리
-      else {
+      // 3. 직접 업로드된 로컬 영상 처리 (다운로드 방지 및 내부 재생 제어)
+      else if (targetUrl.includes("supabase.co")) {
         const videoElement = nativeVideoRefs.current[videoIndex];
         if (videoElement) {
+          // 영상의 현재 재생 시간을 설정
           videoElement.currentTime = totalSeconds;
-          videoElement.play().catch(e => console.error("Auto-play failed:", e));
-        } else {
-          window.open(targetUrl, "_blank");
+          videoElement.play().catch(e => console.log("자동 재생은 사용자 상호작용이 필요할 수 있습니다."));
         }
       }
     }
@@ -535,6 +534,7 @@ export default function StreetPage() {
                             className="absolute top-0 left-0 w-full h-full" 
                             controls 
                             playsInline 
+                            preload="metadata"
                           />
                         )}
                       </div>
